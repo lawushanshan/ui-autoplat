@@ -1,0 +1,176 @@
+<mxfile host="app.diagrams.net" modified="2026-06-02T13:30:00.000Z" agent="Codex" version="24.7.17" type="device">
+  <diagram id="ui-autoplat-architecture" name="ui-autoplat 架构">
+    <mxGraphModel dx="1664" dy="1047" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="ui-autoplat UI 自动化测试平台架构" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="420" y="30" width="760" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="目标：让用户继续用 Robocorp / Playwright 风格编写 UI 用例，平台统一负责发现、配置、执行、报告、历史和 API 集成。" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#4B5563" vertex="1" parent="1">
+          <mxGeometry x="320" y="75" width="960" height="40" as="geometry" />
+        </mxCell>
+
+        <mxCell id="user_layer" value="用户与输入" style="swimlane;html=1;whiteSpace=wrap;startSize=30;rounded=1;strokeColor=#64748B;fillColor=#F8FAFC;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="140" width="250" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="entry_layer" value="入口层" style="swimlane;html=1;whiteSpace=wrap;startSize=30;rounded=1;strokeColor=#2563EB;fillColor=#EFF6FF;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="340" y="140" width="250" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="core_layer" value="平台核心" style="swimlane;html=1;whiteSpace=wrap;startSize=30;rounded=1;strokeColor=#059669;fillColor=#ECFDF5;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="640" y="140" width="430" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="support_layer" value="测试能力层" style="swimlane;html=1;whiteSpace=wrap;startSize=30;rounded=1;strokeColor=#7C3AED;fillColor=#F5F3FF;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="1120" y="140" width="270" height="520" as="geometry" />
+        </mxCell>
+        <mxCell id="output_layer" value="输出与集成" style="swimlane;html=1;whiteSpace=wrap;startSize=30;rounded=1;strokeColor=#D97706;fillColor=#FFFBEB;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="720" width="1350" height="250" as="geometry" />
+        </mxCell>
+
+        <mxCell id="test_author" value="测试编写者 / QA / 开发" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#475569;fillColor=#FFFFFF;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="70" y="190" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="test_files" value="测试文件&lt;br/&gt;tests/**/*task*.py&lt;br/&gt;@task / test_*" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#475569;fillColor=#FFFFFF;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="70" y="285" width="190" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="config_file" value="autoplat.yaml / yml&lt;br/&gt;profiles&lt;br/&gt;CLI overrides" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#475569;fillColor=#FFFFFF;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="70" y="400" width="190" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="generated_project" value="scaffold / init&lt;br/&gt;生成测试项目模板" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#475569;fillColor=#FFFFFF;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="70" y="515" width="190" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="cli" value="CLI：autoplat&lt;br/&gt;run / discover / report&lt;br/&gt;history / config / serve" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#1D4ED8;fillColor=#DBEAFE;fontStyle=1;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="370" y="200" width="190" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="api" value="Action Server&lt;br/&gt;HTTP API&lt;br/&gt;/api/runs / suites / stats" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#1D4ED8;fillColor=#DBEAFE;fontStyle=1;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="370" y="335" width="190" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="scaffold" value="ScaffoldGenerator&lt;br/&gt;basic / ecommerce / saas" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#1D4ED8;fillColor=#DBEAFE;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="370" y="465" width="190" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="loader" value="Config Loader&lt;br/&gt;Settings / Profile&lt;br/&gt;配置合并与校验" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#047857;fillColor=#D1FAE5;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="680" y="185" width="170" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="registry" value="Registry / Discover&lt;br/&gt;文件扫描&lt;br/&gt;标签 / 优先级 / 数据驱动展开" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#047857;fillColor=#D1FAE5;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="880" y="185" width="190" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="models" value="Domain Models&lt;br/&gt;TestCase / TestSuite&lt;br/&gt;TestResult / TestRun" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#047857;fillColor=#D1FAE5;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="680" y="315" width="170" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="runner" value="TestRunner&lt;br/&gt;subprocess / in-process&lt;br/&gt;retry / timeout / parallel" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#047857;fillColor=#A7F3D0;fontStyle=1;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="880" y="315" width="190" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="subprocess" value="subprocess 模式&lt;br/&gt;python -m robocorp.tasks run&lt;br/&gt;更贴近真实 Robocorp 执行" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#047857;fillColor=#FFFFFF;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="680" y="455" width="185" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="inprocess" value="in-process 模式&lt;br/&gt;直接调用函数&lt;br/&gt;适合平台测试与数据驱动" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#047857;fillColor=#FFFFFF;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="900" y="455" width="185" height="85" as="geometry" />
+        </mxCell>
+
+        <mxCell id="browser" value="BrowserManager&lt;br/&gt;robocorp-browser&lt;br/&gt;Playwright Page" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#6D28D9;fillColor=#EDE9FE;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="1150" y="195" width="210" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="page_objects" value="Page Objects&lt;br/&gt;BasePage / PageFactory" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#6D28D9;fillColor=#EDE9FE;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="1150" y="315" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="assertions" value="Assertions&lt;br/&gt;Web assertions&lt;br/&gt;SoftAssertions" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#6D28D9;fillColor=#EDE9FE;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="1150" y="425" width="210" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="utils" value="Utils&lt;br/&gt;retry / wait / logger&lt;br/&gt;data_driven" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#6D28D9;fillColor=#EDE9FE;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="1150" y="540" width="210" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="collector" value="Result Collector&lt;br/&gt;收集 TestResult&lt;br/&gt;生成 TestRun" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#B45309;fillColor=#FEF3C7;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="80" y="785" width="190" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="reports" value="Reports&lt;br/&gt;HTML / JSON / Allure" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#B45309;fillColor=#FEF3C7;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="330" y="785" width="190" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="history" value="HistoryStore&lt;br/&gt;SQLite: output/history.db&lt;br/&gt;趋势 / flaky / stats" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#B45309;fillColor=#FEF3C7;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="580" y="785" width="220" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="output" value="output/&lt;br/&gt;reports / screenshots / videos&lt;br/&gt;allure-results / logs" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#B45309;fillColor=#FEF3C7;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="860" y="785" width="220" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="external" value="外部集成&lt;br/&gt;CI / Dashboard / API Client&lt;br/&gt;Allure Serve" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#B45309;fillColor=#FEF3C7;fontSize=13" vertex="1" parent="1">
+          <mxGeometry x="1140" y="785" width="220" height="75" as="geometry" />
+        </mxCell>
+        <mxCell id="roadmap" value="下一步重点&lt;br/&gt;1. 失败截图/视频统一采集&lt;br/&gt;2. API 查询持久化历史 run&lt;br/&gt;3. 完善 PageObject/断言 DSL&lt;br/&gt;4. 浏览器端到端真实回归" style="rounded=1;whiteSpace=wrap;html=1;strokeColor=#92400E;fillColor=#FFFFFF;fontSize=13;align=left;spacingLeft=12" vertex="1" parent="1">
+          <mxGeometry x="80" y="890" width="1280" height="75" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" value="编写" style="endArrow=block;html=1;rounded=0;strokeColor=#64748B;fontSize=12" edge="1" parent="1" source="test_author" target="test_files">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="执行命令" style="endArrow=block;html=1;rounded=0;strokeColor=#2563EB;fontSize=12" edge="1" parent="1" source="test_author" target="cli">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="触发 / 查询" style="endArrow=block;html=1;rounded=0;strokeColor=#2563EB;fontSize=12" edge="1" parent="1" source="external" target="api">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="读取配置" style="endArrow=block;html=1;rounded=0;strokeColor=#059669;fontSize=12" edge="1" parent="1" source="cli" target="loader">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="读取配置" style="endArrow=block;html=1;rounded=0;strokeColor=#059669;fontSize=12" edge="1" parent="1" source="api" target="loader">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="发现用例" style="endArrow=block;html=1;rounded=0;strokeColor=#059669;fontSize=12" edge="1" parent="1" source="cli" target="registry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="扫描" style="endArrow=block;html=1;rounded=0;strokeColor=#059669;fontSize=12" edge="1" parent="1" source="test_files" target="registry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="配置源" style="endArrow=block;html=1;rounded=0;strokeColor=#64748B;fontSize=12" edge="1" parent="1" source="config_file" target="loader">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="生成 TestCase/TestSuite" style="endArrow=block;html=1;rounded=0;strokeColor=#059669;fontSize=12" edge="1" parent="1" source="registry" target="models">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="运行" style="endArrow=block;html=1;rounded=0;strokeColor=#059669;fontSize=12" edge="1" parent="1" source="models" target="runner">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" value="选择执行模式" style="endArrow=block;html=1;rounded=0;strokeColor=#059669;fontSize=12" edge="1" parent="1" source="runner" target="subprocess">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" value="选择执行模式" style="endArrow=block;html=1;rounded=0;strokeColor=#059669;fontSize=12" edge="1" parent="1" source="runner" target="inprocess">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e13" value="驱动浏览器" style="endArrow=block;html=1;rounded=0;strokeColor=#7C3AED;fontSize=12" edge="1" parent="1" source="subprocess" target="browser">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e14" value="驱动浏览器" style="endArrow=block;html=1;rounded=0;strokeColor=#7C3AED;fontSize=12" edge="1" parent="1" source="inprocess" target="browser">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e15" value="封装页面" style="endArrow=block;html=1;rounded=0;strokeColor=#7C3AED;fontSize=12" edge="1" parent="1" source="browser" target="page_objects">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e16" value="校验" style="endArrow=block;html=1;rounded=0;strokeColor=#7C3AED;fontSize=12" edge="1" parent="1" source="page_objects" target="assertions">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e17" value="辅助" style="endArrow=block;html=1;rounded=0;strokeColor=#7C3AED;fontSize=12" edge="1" parent="1" source="utils" target="runner">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e18" value="收集结果" style="endArrow=block;html=1;rounded=0;strokeColor=#D97706;fontSize=12" edge="1" parent="1" source="runner" target="collector">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e19" value="生成" style="endArrow=block;html=1;rounded=0;strokeColor=#D97706;fontSize=12" edge="1" parent="1" source="collector" target="reports">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e20" value="记录" style="endArrow=block;html=1;rounded=0;strokeColor=#D97706;fontSize=12" edge="1" parent="1" source="collector" target="history">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e21" value="写入" style="endArrow=block;html=1;rounded=0;strokeColor=#D97706;fontSize=12" edge="1" parent="1" source="reports" target="output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e22" value="查询/展示" style="endArrow=block;html=1;rounded=0;strokeColor=#D97706;fontSize=12" edge="1" parent="1" source="history" target="external">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e23" value="生成模板" style="endArrow=block;html=1;rounded=0;strokeColor=#2563EB;fontSize=12" edge="1" parent="1" source="scaffold" target="generated_project">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

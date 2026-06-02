@@ -1,0 +1,22 @@
+browser:
+  browser_type: chromium
+  headless: true
+  screenshot: only-on-failure
+  viewport:
+    width: 1280
+    height: 720
+
+execution:
+  mode: subprocess
+  retries: 0
+  timeout_per_test: 180
+  max_parallel: 1
+
+output:
+  dir: ./output
+  report_format: all
+
+discovery:
+  paths:
+    - .
+  file_pattern: "*task*.py"
