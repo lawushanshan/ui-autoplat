@@ -1,0 +1,13 @@
+execution:
+  mode: in-process
+  retries: 0
+  timeout_per_test: 60
+
+output:
+  dir: ./output
+  report_format: json
+
+discovery:
+  paths:
+    - .
+  file_pattern: "*task*.py"

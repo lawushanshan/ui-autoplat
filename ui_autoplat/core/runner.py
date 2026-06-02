@@ -135,6 +135,9 @@ class TestRunner:
         return result
 
     def _execute_subprocess(self, test: TestCase) -> TestResult:
+        if test.skip_reason:
+            return self._skipped_result(test)
+
         last_result: TestResult | None = None
         for attempt in range(self._config.execution.retries + 1):
             last_result = self._execute_subprocess_once(test, retry_attempt=attempt)
@@ -236,6 +239,9 @@ class TestRunner:
             return result
 
     def _execute_in_process(self, test: TestCase) -> TestResult:
+        if test.skip_reason:
+            return self._skipped_result(test)
+
         start_time = datetime.now()
 
         retries = self._config.execution.retries
@@ -283,6 +289,18 @@ class TestRunner:
                 self._context.test_params = None
 
         return last_result  # type: ignore[return-value]
+
+    def _skipped_result(self, test: TestCase) -> TestResult:
+        now = datetime.now()
+        return TestResult(
+            test_case=test,
+            status="skipped",
+            start_time=now,
+            end_time=now,
+            duration=0.0,
+            error=TestExecutionError(test.skip_reason or "Skipped"),
+            error_traceback=test.skip_reason,
+        )
 
     def _attach_in_process_artifacts(self, result: TestResult) -> None:
         if result.status not in ("failed", "error"):

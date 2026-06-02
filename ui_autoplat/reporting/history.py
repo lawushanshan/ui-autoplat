@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS test_results (
     duration REAL NOT NULL,
     error_message TEXT,
     retry_attempt INTEGER DEFAULT 0,
+    case_id TEXT,
+    case_name TEXT,
+    parameters TEXT,
+    skip_reason TEXT,
     screenshots TEXT,
     video_path TEXT,
     log_path TEXT,
@@ -69,6 +73,10 @@ class HistoryStore:
             for row in self._conn.execute("PRAGMA table_info(test_results)").fetchall()
         }
         migrations = {
+            "case_id": "ALTER TABLE test_results ADD COLUMN case_id TEXT",
+            "case_name": "ALTER TABLE test_results ADD COLUMN case_name TEXT",
+            "parameters": "ALTER TABLE test_results ADD COLUMN parameters TEXT",
+            "skip_reason": "ALTER TABLE test_results ADD COLUMN skip_reason TEXT",
             "screenshots": "ALTER TABLE test_results ADD COLUMN screenshots TEXT",
             "video_path": "ALTER TABLE test_results ADD COLUMN video_path TEXT",
             "log_path": "ALTER TABLE test_results ADD COLUMN log_path TEXT",
@@ -113,8 +121,9 @@ class HistoryStore:
             conn.execute(
                 """INSERT INTO test_results
                    (run_id, test_name, suite_name, status, duration, error_message, retry_attempt,
+                    case_id, case_name, parameters, skip_reason,
                     screenshots, video_path, log_path, artifacts, timestamp)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     run.id,
                     result.test_case.name,
@@ -123,6 +132,12 @@ class HistoryStore:
                     result.duration,
                     str(result.error) if result.error else None,
                     result.retry_attempt,
+                    result.test_case.case_id,
+                    result.test_case.case_name,
+                    json.dumps(result.test_case.parameters[0], ensure_ascii=False)
+                    if result.test_case.parameters
+                    else None,
+                    result.test_case.skip_reason,
                     json.dumps([str(p) for p in result.screenshots], ensure_ascii=False),
                     str(result.video_path) if result.video_path else None,
                     str(result.log_path) if result.log_path else None,
@@ -158,6 +173,7 @@ class HistoryStore:
 
         result_rows = conn.execute(
             """SELECT test_name, suite_name, status, duration, error_message, retry_attempt,
+                      case_id, case_name, parameters, skip_reason,
                       screenshots, video_path, log_path, artifacts, timestamp
                FROM test_results
                WHERE run_id = ?

@@ -80,13 +80,18 @@ class HTMLReportGenerator:
         for result in run.results:
             status_class = f"status-{result.status}"
             error_id = f"error-{result.test_case.name}"
+            meta_parts = [result.test_case.suite_name, result.test_case.file_path.name]
+            case_label = result.test_case.case_id or result.test_case.case_name
+            if case_label:
+                meta_parts.append(f"Case: {case_label}")
+            if result.test_case.tags:
+                meta_parts.append(f"Tags: {', '.join(result.test_case.tags)}")
             item_html = (
                 f'<div class="test-item">'
                 f'<div>'
                 f'<div class="test-name">{result.test_case.name}</div>'
                 f'<div class="test-meta">'
-                f'{result.test_case.suite_name} | {result.test_case.file_path.name}'
-                f'{f" | Tags: {', '.join(result.test_case.tags)}" if result.test_case.tags else ""}'
+                f'{self._escape_html(" | ".join(meta_parts))}'
                 f'</div></div>'
                 f'<div style="display:flex;align-items:center;gap:12px;">'
                 f'<span style="font-size:13px">{result.duration:.1f}s</span>'

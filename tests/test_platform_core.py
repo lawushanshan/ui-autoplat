@@ -534,6 +534,87 @@ def test_user(row):
     assert [tc.name for suite in suites for tc in suite.tests] == ["test_user[1]"]
 
 
+def test_data_driven_case_metadata_and_skip_are_reported(tmp_path: Path, monkeypatch) -> None:
+    data_file = tmp_path / "users.json"
+    data_file.write_text(
+        """
+[
+  {"case_id": "LOGIN-001", "case_name": "valid user", "name": "alice"},
+  {"case_id": "LOGIN-002", "name": "bob", "skip": true, "skip_reason": "waiting for account"}
+]
+""",
+        encoding="utf-8",
+    )
+    task_file = tmp_path / "data_task.py"
+    task_file.write_text(
+        f"""
+from pathlib import Path
+
+from robocorp.tasks import task
+from ui_autoplat.utils.data_driven import data_driven
+
+seen = []
+
+
+@data_driven(Path(r"{data_file}"))
+@task
+def test_user(row):
+    seen.append(row["name"])
+""",
+        encoding="utf-8",
+    )
+
+    suites = discover_tests([tmp_path])
+    tests = [tc for suite in suites for tc in suite.tests]
+
+    assert [tc.name for tc in tests] == ["test_user[LOGIN-001]", "test_user[LOGIN-002]"]
+    assert tests[0].case_id == "LOGIN-001"
+    assert tests[0].case_name == "valid user"
+    assert tests[1].skip_reason == "waiting for account"
+
+    settings = Settings.model_validate(
+        {
+            "execution": {"mode": "in-process"},
+            "output": {"dir": tmp_path / "output", "report_format": "json"},
+        }
+    )
+    run = AutoplatTestRunner(settings).run(suites)
+
+    assert run.summary.total == 2
+    assert run.summary.passed == 1
+    assert run.summary.skipped == 1
+    assert [result.status for result in run.results] == ["passed", "skipped"]
+
+    report_path = JSONReportGenerator(settings.output).generate(run)
+    report = report_path.read_text(encoding="utf-8")
+    assert '"case_id": "LOGIN-001"' in report
+    assert '"case_name": "valid user"' in report
+    assert '"skip_reason": "waiting for account"' in report
+
+    junit_path = JUnitReportGenerator(settings.output).generate(run)
+    root = ET.parse(junit_path).getroot()
+    skipped_case = root.findall("testcase")[1]
+    assert skipped_case.attrib["case_id"] == "LOGIN-002"
+    skipped = skipped_case.find("skipped")
+    assert skipped is not None
+    assert skipped.attrib["message"] == "waiting for account"
+
+    (tmp_path / "autoplat.yaml").write_text(
+        f"""
+output:
+  dir: {tmp_path / "output"}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(endpoints, "_last_run", None)
+    response = endpoints.get_run_results(run.id)
+
+    assert response["results"][0]["case_id"] == "LOGIN-001"
+    assert response["results"][0]["parameters"]["name"] == "alice"
+    assert response["results"][1]["skip_reason"] == "waiting for account"
+
+
 def test_history_store_can_read_latest_and_run_by_id(tmp_path: Path) -> None:
     task_file = tmp_path / "sample_task.py"
     _write_task_file(task_file)

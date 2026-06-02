@@ -10,7 +10,7 @@ from typing import Any, Callable
 from ui_autoplat.config.settings import DiscoveryConfig
 from ui_autoplat.core.exceptions import RegistryError
 from ui_autoplat.core.models import TestCase, TestSuite
-from ui_autoplat.utils.data_driven import get_test_data
+from ui_autoplat.utils.data_driven import DataCase, expand_data_cases
 
 _TASK_DECORATOR_ATTR = "_robocorp_task_metadata"
 
@@ -32,7 +32,7 @@ def _matches_tags(func_tags: list[str], tags: list[str], match_any: bool) -> boo
     return all(t in func_tags for t in tags)
 
 
-def _expand_parameters(func: Callable[..., Any], base_dir: Path) -> list[dict[str, Any] | None]:
+def _expand_parameters(func: Callable[..., Any], base_dir: Path) -> list[DataCase | None]:
     source = getattr(func, "_data_source", None)
     if source is None:
         return [None]
@@ -40,7 +40,7 @@ def _expand_parameters(func: Callable[..., Any], base_dir: Path) -> list[dict[st
     source = Path(source)
     if not source.is_absolute():
         source = base_dir / source
-    data = get_test_data(source, loader=loader)
+    data = expand_data_cases(source, loader=loader)
     return data or [None]
 
 
@@ -139,10 +139,18 @@ def discover_tests(
                 if priority_filter and priority not in priority_filter:
                     continue
 
-                for index, params in enumerate(_expand_parameters(func, file_path.parent), start=1):
+                for data_case in _expand_parameters(func, file_path.parent):
                     name = func.__name__
-                    if params is not None:
-                        name = f"{func.__name__}[{index}]"
+                    parameters = None
+                    case_id = None
+                    case_name = None
+                    skip_reason = None
+                    if data_case is not None:
+                        name = f"{func.__name__}[{data_case.display_name}]"
+                        parameters = [data_case.row]
+                        case_id = data_case.case_id
+                        case_name = data_case.case_name
+                        skip_reason = data_case.skip_reason
 
                     key = (file_path, name)
                     if key in seen:
@@ -157,7 +165,10 @@ def discover_tests(
                         tags=func_tags,
                         priority=priority,
                         description=doc.strip().split("\n")[0] if doc else "",
-                        parameters=[params] if params is not None else None,
+                        parameters=parameters,
+                        case_id=case_id,
+                        case_name=case_name,
+                        skip_reason=skip_reason,
                     )
                     suite.tests.append(test_case)
 

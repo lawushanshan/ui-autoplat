@@ -50,15 +50,17 @@ class JUnitReportGenerator:
         return report_path
 
     def _testcase_element(self, result: TestResult) -> ET.Element:
-        testcase = ET.Element(
-            "testcase",
-            {
-                "classname": result.test_case.suite_name,
-                "name": result.test_case.name,
-                "file": str(result.test_case.file_path),
-                "time": f"{result.duration:.3f}",
-            },
-        )
+        attrs = {
+            "classname": result.test_case.suite_name,
+            "name": result.test_case.name,
+            "file": str(result.test_case.file_path),
+            "time": f"{result.duration:.3f}",
+        }
+        if result.test_case.case_id:
+            attrs["case_id"] = result.test_case.case_id
+        if result.test_case.case_name:
+            attrs["case_name"] = result.test_case.case_name
+        testcase = ET.Element("testcase", attrs)
 
         if result.status == "failed":
             failure = ET.SubElement(
@@ -81,7 +83,12 @@ class JUnitReportGenerator:
             )
             error.text = result.error_traceback or str(result.error) if result.error else ""
         elif result.status == "skipped":
-            ET.SubElement(testcase, "skipped")
+            skipped = ET.SubElement(
+                testcase,
+                "skipped",
+                {"message": result.test_case.skip_reason or "Skipped"},
+            )
+            skipped.text = result.test_case.skip_reason or ""
 
         system_out_lines = []
         if result.screenshots:

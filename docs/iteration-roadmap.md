@@ -10,6 +10,7 @@ The platform is currently a UI automation testing platform built around:
 - SQLite-backed history and persisted artifacts.
 - In-process and subprocess execution modes.
 - Data-driven test discovery and execution in in-process mode.
+- Data-driven case metadata and row-level skip support.
 - Basic API server for runs, suites, history, stats, and config.
 - Configuration validation before execution through `autoplat config validate`.
 - PageObject base helpers and web assertion DSL for test authoring.
@@ -31,6 +32,8 @@ The platform is currently a UI automation testing platform built around:
 - Supports priority filtering `P0` through `P3`.
 - Supports task-name filtering.
 - Supports data-driven expansion into `test_name[1]`, `test_name[2]`.
+- Supports data-driven display names from `case_id` or `case_name`.
+- Supports data-driven row skipping through `skip` and `skip_reason`.
 - Resolves relative data files from the task file directory.
 - Imports same-named task files from different directories as distinct modules.
 
@@ -165,6 +168,14 @@ Tasks:
 - Support CSV/JSON validation.
 - Include data row metadata in reports.
 - Consider subprocess-mode support strategy.
+
+Status:
+
+- Started.
+- `case_id` and `case_name` are used in discovered test names.
+- Data rows can set `skip: true` and `skip_reason`.
+- JSON, JUnit, HTML, history, and API outputs include data case metadata.
+- Added `examples/data_driven`.
 
 Needs manual/user involvement:
 

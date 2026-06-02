@@ -153,6 +153,10 @@ def _run_to_dict(run: TestRun) -> dict[str, Any]:
         results_list.append({
             "name": r.test_case.name,
             "suite": r.test_case.suite_name,
+            "case_id": r.test_case.case_id,
+            "case_name": r.test_case.case_name,
+            "parameters": r.test_case.parameters[0] if r.test_case.parameters else None,
+            "skip_reason": r.test_case.skip_reason,
             "status": r.status,
             "duration": round(r.duration, 2),
             "error": str(r.error) if r.error else None,
@@ -194,6 +198,10 @@ def _history_run_to_dict(run: dict[str, Any]) -> dict[str, Any]:
             {
                 "name": r["test_name"],
                 "suite": r["suite_name"],
+                "case_id": r.get("case_id"),
+                "case_name": r.get("case_name"),
+                "parameters": _loads_json_dict(r.get("parameters")),
+                "skip_reason": r.get("skip_reason"),
                 "status": r["status"],
                 "duration": round(r["duration"], 2),
                 "error": r["error_message"],
@@ -219,3 +227,15 @@ def _loads_json_list(value: Any) -> list[str]:
     if not isinstance(data, list):
         return []
     return [str(item) for item in data]
+
+
+def _loads_json_dict(value: Any) -> dict[str, Any] | None:
+    if not value:
+        return None
+    try:
+        data = json.loads(value)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return data

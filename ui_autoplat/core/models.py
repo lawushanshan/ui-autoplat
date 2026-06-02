@@ -26,6 +26,9 @@ class TestCase:
     priority: int = 3  # 0=P0 (critical) through 3=P3 (low)
     description: str = ""
     parameters: list[dict[str, Any]] | None = None
+    case_id: str | None = None
+    case_name: str | None = None
+    skip_reason: str | None = None
     retry_count: int = 0
     timeout: float = 300.0
 

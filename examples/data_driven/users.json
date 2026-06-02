@@ -1,0 +1,16 @@
+[
+  {
+    "case_id": "LOGIN-001",
+    "case_name": "valid admin",
+    "username": "admin",
+    "expected": "ok"
+  },
+  {
+    "case_id": "LOGIN-002",
+    "case_name": "locked account",
+    "username": "locked",
+    "expected": "locked",
+    "skip": true,
+    "skip_reason": "locked-account flow not implemented in demo"
+  }
+]
