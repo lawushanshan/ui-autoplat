@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ui_autoplat.core.exceptions import DataDrivenError
+
 
 @dataclass(frozen=True)
 class DataCase:
@@ -30,18 +32,40 @@ class DataCase:
 
 def load_csv(file_path: Path | str) -> list[dict[str, str]]:
     file_path = Path(file_path)
-    with open(file_path, newline="", encoding="utf-8") as f:
+    _ensure_source_exists(file_path)
+    with open(file_path, newline="", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
-        return list(reader)
+        if reader.fieldnames is None:
+            raise DataDrivenError(f"CSV data file has no header row: {file_path}")
+        fieldnames = [name for name in reader.fieldnames if name]
+        if not fieldnames:
+            raise DataDrivenError(f"CSV data file has no usable columns: {file_path}")
+        rows = list(reader)
+    if not rows:
+        raise DataDrivenError(f"CSV data file has no data rows: {file_path}")
+    return rows
 
 
 def load_json(file_path: Path | str) -> list[dict[str, Any]]:
     file_path = Path(file_path)
+    _ensure_source_exists(file_path)
     with open(file_path, encoding="utf-8") as f:
-        data = json.load(f)
-    if isinstance(data, list):
-        return data
-    return [data]
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError as exc:
+            raise DataDrivenError(f"Invalid JSON data file {file_path}: {exc.msg}") from exc
+    if isinstance(data, dict):
+        return [data]
+    if not isinstance(data, list):
+        raise DataDrivenError(f"JSON data file must contain an object or a list of objects: {file_path}")
+    if not data:
+        raise DataDrivenError(f"JSON data file has no data rows: {file_path}")
+    for index, row in enumerate(data, start=1):
+        if not isinstance(row, dict):
+            raise DataDrivenError(
+                f"JSON data row {index} must be an object in {file_path}, got {type(row).__name__}"
+            )
+    return data
 
 
 def data_driven(source: str | Path, loader: str = "auto"):
@@ -70,12 +94,12 @@ def get_test_data(source: Path | str, loader: str = "auto") -> list[dict[str, An
             return load_csv(source)
         if source.suffix == ".json":
             return load_json(source)
-        raise ValueError(f"Cannot auto-detect format for: {source}")
+        raise DataDrivenError(f"Cannot auto-detect data format for: {source}")
     if loader == "csv":
         return load_csv(source)
     if loader == "json":
         return load_json(source)
-    raise ValueError(f"Unknown loader: {loader}")
+    raise DataDrivenError(f"Unknown data loader: {loader}")
 
 
 def expand_data_cases(source: Path | str, loader: str = "auto") -> list[DataCase]:
@@ -85,7 +109,7 @@ def expand_data_cases(source: Path | str, loader: str = "auto") -> list[DataCase
 
 def build_data_case(row: dict[str, Any], index: int) -> DataCase:
     if not isinstance(row, dict):
-        row = {"value": row}
+        raise DataDrivenError(f"Data row {index} must be a mapping, got {type(row).__name__}")
     skip_reason = _skip_reason(row)
     return DataCase(
         index=index,
@@ -123,3 +147,10 @@ def _is_truthy(value: Any) -> bool:
 def _safe_case_label(value: str) -> str:
     label = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
     return label.strip("_") or "case"
+
+
+def _ensure_source_exists(source: Path) -> None:
+    if not source.exists():
+        raise DataDrivenError(f"Data source not found: {source}")
+    if not source.is_file():
+        raise DataDrivenError(f"Data source is not a file: {source}")

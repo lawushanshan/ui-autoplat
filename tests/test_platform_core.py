@@ -13,6 +13,7 @@ from ui_autoplat.assertions.web_assertions import expect_text, expect_url_contai
 from ui_autoplat.browser.manager import BrowserManager
 from ui_autoplat.browser.page_objects import BasePage
 from ui_autoplat.config.settings import Settings
+from ui_autoplat.core.exceptions import DataDrivenError, RegistryError
 from ui_autoplat.core.models import EnvironmentInfo, TestResult as AutoplatTestResult, TestRun as AutoplatTestRun
 from ui_autoplat.core.registry import discover_tests
 from ui_autoplat.core.runner import TestRunner as AutoplatTestRunner
@@ -20,6 +21,7 @@ from ui_autoplat.reporting.html_report import HTMLReportGenerator
 from ui_autoplat.reporting.history import HistoryStore
 from ui_autoplat.reporting.junit_report import JUnitReportGenerator
 from ui_autoplat.reporting.json_report import JSONReportGenerator
+from ui_autoplat.utils.data_driven import load_csv, load_json
 
 MINIMAL_PNG_DATA_URI = (
     "data:image/png;base64,"
@@ -613,6 +615,93 @@ output:
     assert response["results"][0]["case_id"] == "LOGIN-001"
     assert response["results"][0]["parameters"]["name"] == "alice"
     assert response["results"][1]["skip_reason"] == "waiting for account"
+
+
+def test_data_driven_csv_metadata_is_supported(tmp_path: Path) -> None:
+    data_file = tmp_path / "users.csv"
+    data_file.write_text(
+        "case_id,case_name,name,skip,skip_reason\n"
+        "CSV-001,valid csv,alice,,\n"
+        "CSV-002,skipped csv,bob,true,waiting for csv account\n",
+        encoding="utf-8",
+    )
+    task_file = tmp_path / "csv_task.py"
+    task_file.write_text(
+        """
+from robocorp.tasks import task
+from ui_autoplat.utils.data_driven import data_driven
+
+
+@data_driven("users.csv")
+@task
+def test_csv(row):
+    assert row["name"]
+""",
+        encoding="utf-8",
+    )
+
+    suites = discover_tests([tmp_path])
+    tests = [tc for suite in suites for tc in suite.tests]
+
+    assert [tc.name for tc in tests] == ["test_csv[CSV-001]", "test_csv[CSV-002]"]
+    assert tests[0].case_name == "valid csv"
+    assert tests[1].skip_reason == "waiting for csv account"
+
+
+def test_data_driven_invalid_json_rows_raise_clear_error(tmp_path: Path) -> None:
+    data_file = tmp_path / "users.json"
+    data_file.write_text('["alice"]', encoding="utf-8")
+
+    try:
+        load_json(data_file)
+    except DataDrivenError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("load_json should reject non-object rows")
+
+    assert "row 1" in message
+    assert "must be an object" in message
+
+
+def test_data_driven_empty_csv_raises_clear_error(tmp_path: Path) -> None:
+    data_file = tmp_path / "users.csv"
+    data_file.write_text("", encoding="utf-8")
+
+    try:
+        load_csv(data_file)
+    except DataDrivenError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("load_csv should reject empty files")
+
+    assert "no header row" in message
+
+
+def test_discovery_reports_invalid_data_source_context(tmp_path: Path) -> None:
+    task_file = tmp_path / "missing_data_task.py"
+    task_file.write_text(
+        """
+from robocorp.tasks import task
+from ui_autoplat.utils.data_driven import data_driven
+
+
+@data_driven("missing.json")
+@task
+def test_missing_data(row):
+    assert row
+""",
+        encoding="utf-8",
+    )
+
+    try:
+        discover_tests([tmp_path])
+    except RegistryError as exc:
+        message = str(exc)
+    else:
+        raise AssertionError("discover_tests should fail for missing data source")
+
+    assert "Invalid data source for test_missing_data" in message
+    assert "Data source not found" in message
 
 
 def test_history_store_can_read_latest_and_run_by_id(tmp_path: Path) -> None:

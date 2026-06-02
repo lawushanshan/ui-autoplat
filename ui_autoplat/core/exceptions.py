@@ -29,6 +29,10 @@ class ConfigurationError(AutoPlatError):
     """Invalid configuration file or value."""
 
 
+class DataDrivenError(AutoPlatError):
+    """Invalid data-driven source or row."""
+
+
 class RegistryError(AutoPlatError):
     """Test discovery failure."""
 

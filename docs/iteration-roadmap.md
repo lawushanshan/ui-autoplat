@@ -174,6 +174,7 @@ Status:
 - Started.
 - `case_id` and `case_name` are used in discovered test names.
 - Data rows can set `skip: true` and `skip_reason`.
+- CSV and JSON data files now fail fast with clear validation errors.
 - JSON, JUnit, HTML, history, and API outputs include data case metadata.
 - Added `examples/data_driven`.
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ui_autoplat.config.settings import DiscoveryConfig
-from ui_autoplat.core.exceptions import RegistryError
+from ui_autoplat.core.exceptions import DataDrivenError, RegistryError
 from ui_autoplat.core.models import TestCase, TestSuite
 from ui_autoplat.utils.data_driven import DataCase, expand_data_cases
 
@@ -40,7 +40,10 @@ def _expand_parameters(func: Callable[..., Any], base_dir: Path) -> list[DataCas
     source = Path(source)
     if not source.is_absolute():
         source = base_dir / source
-    data = expand_data_cases(source, loader=loader)
+    try:
+        data = expand_data_cases(source, loader=loader)
+    except DataDrivenError as exc:
+        raise RegistryError(f"Invalid data source for {func.__name__}: {exc}") from exc
     return data or [None]
 
 

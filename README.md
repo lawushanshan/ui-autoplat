@@ -43,6 +43,13 @@ cd examples/page_object
 autoplat run . --config autoplat.yaml --report json
 ```
 
+Run a data-driven example:
+
+```bash
+cd examples/data_driven
+autoplat run . --config autoplat.yaml --report json
+```
+
 ## Example PageObject
 
 ```python
@@ -69,6 +76,34 @@ class LoginPage(BasePage):
 def test_login_success():
     LoginPage().goto().login("admin", "secret")
     expect_text_contains("h1", "Dashboard")
+```
+
+## Data-Driven Rows
+
+JSON and CSV data rows may include reserved metadata fields:
+
+- `case_id`: stable case identifier, used in discovered test names.
+- `case_name`: human-readable case name.
+- `skip`: truthy value to skip the row.
+- `skip_reason`: reason shown in reports for skipped rows.
+
+Example:
+
+```json
+[
+  {
+    "case_id": "LOGIN-001",
+    "case_name": "valid admin",
+    "username": "admin",
+    "expected": "ok"
+  },
+  {
+    "case_id": "LOGIN-002",
+    "username": "locked",
+    "skip": true,
+    "skip_reason": "locked account flow is not ready"
+  }
+]
 ```
 
 ## Development
