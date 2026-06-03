@@ -10,7 +10,7 @@ import subprocess
 import json
 import threading
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
 from ui_autoplat.actions import endpoints
@@ -552,6 +552,48 @@ discovery:
         server.server_close()
 
 
+def test_api_http_server_enforces_bearer_token(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "autoplat.yaml").write_text(
+        f"""
+action_server:
+  auth_token: secret-token
+output:
+  dir: {tmp_path / "output"}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    APIRequestHandler._routes.clear()
+    APIRequestHandler._auth_token = "secret-token"
+    from ui_autoplat.actions import endpoints as api_endpoints
+
+    APIRequestHandler.register("/api/health", api_endpoints.get_health)
+    APIRequestHandler.register("/api/config", api_endpoints.get_config)
+
+    server = HTTPServer(("127.0.0.1", 0), APIRequestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        assert _http_json(f"{base_url}/api/health")["status"] == "ok"
+
+        unauthorized = _http_json_error(f"{base_url}/api/config")
+        assert unauthorized["status"] == 401
+        assert unauthorized["body"]["error"]["code"] == "unauthorized"
+
+        config = _http_json(
+            f"{base_url}/api/config",
+            headers={"Authorization": "Bearer secret-token"},
+        )
+        assert config["action_server"]["auth_token"] == "***"
+    finally:
+        server.shutdown()
+        server.server_close()
+        APIRequestHandler._auth_token = None
+
+
 def test_api_async_run_reports_running_and_blocks_second_run(
     tmp_path: Path,
     monkeypatch,
@@ -718,14 +760,15 @@ def test_api_cancel_rejects_when_no_run_is_active() -> None:
         raise AssertionError("Expected cancel without active run to be rejected")
 
 
-def _http_json(url: str) -> dict:
-    with urlopen(url, timeout=5) as response:
+def _http_json(url: str, headers: dict[str, str] | None = None) -> dict:
+    request = Request(url, headers=headers or {})
+    with urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _http_json_error(url: str) -> dict:
+def _http_json_error(url: str, headers: dict[str, str] | None = None) -> dict:
     try:
-        _http_json(url)
+        _http_json(url, headers=headers)
     except HTTPError as exc:
         return {
             "status": exc.code,

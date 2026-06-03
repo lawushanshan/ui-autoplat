@@ -18,6 +18,8 @@ class APIError(Exception):
 
 class APIRequestHandler(BaseHTTPRequestHandler):
     _routes: dict[tuple[str, str], tuple[Callable, str]] = {}
+    _auth_token: str | None = None
+    _public_paths = {"/", "/api/health"}
 
     @classmethod
     def register(cls, path: str, handler: Callable, method: str = "GET") -> None:
@@ -27,6 +29,10 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         params = parse_qs(parsed.query)
+
+        if not self._is_authorized(path):
+            self._send_api_error(APIError(401, "unauthorized", "Missing or invalid bearer token"))
+            return
 
         route = self._match_route("GET", path)
         if route:
@@ -51,6 +57,10 @@ class APIRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+
+        if not self._is_authorized(path):
+            self._send_api_error(APIError(401, "unauthorized", "Missing or invalid bearer token"))
+            return
 
         content_length = int(self.headers.get("Content-Length", 0))
         body = {}
@@ -98,6 +108,14 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             body.update(extra)
         self._send_json(error.status_code, body)
 
+    def _is_authorized(self, path: str) -> bool:
+        if self._auth_token is None:
+            return True
+        if path in self._public_paths:
+            return True
+        expected = f"Bearer {self._auth_token}"
+        return self.headers.get("Authorization") == expected
+
     @classmethod
     def _match_route(cls, method: str, path: str) -> tuple[Callable, dict[str, str]] | None:
         exact_key = (method, path)
@@ -138,6 +156,10 @@ class APIRequestHandler(BaseHTTPRequestHandler):
 
 def start_server(host: str = "127.0.0.1", port: int = 8080) -> None:
     from ui_autoplat.actions import endpoints as ep
+    from ui_autoplat.config.loader import load_settings
+
+    settings = load_settings()
+    APIRequestHandler._auth_token = settings.action_server.auth_token
 
     APIRequestHandler.register("/api/health", ep.get_health)
     APIRequestHandler.register("/api/runs/status", ep.get_run_status)
@@ -170,6 +192,8 @@ def start_server(host: str = "127.0.0.1", port: int = 8080) -> None:
     server = HTTPServer((host, port), APIRequestHandler)
     print(f"\n  ui-autoplat API server running at http://{host}:{port}")
     print(f"  API docs: http://{host}:{port}/")
+    if APIRequestHandler._auth_token:
+        print("  API auth: bearer token required for non-public endpoints")
     print(f"  Press Ctrl+C to stop\n")
 
     try:

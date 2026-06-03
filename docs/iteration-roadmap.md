@@ -211,6 +211,9 @@ Status:
 - Documented current cancellation semantics as cooperative cancellation without force-killing the active test.
 - Runner now supports cooperative cancellation between tests.
 - Remaining tests are marked skipped with `Cancelled by request` after cancellation is requested.
+- Added optional bearer-token authentication for API endpoints.
+- Kept `/` and `/api/health` public for discovery and health checks.
+- Redacted `action_server.auth_token` from `/api/config`.
 
 Needs manual/user involvement:
 

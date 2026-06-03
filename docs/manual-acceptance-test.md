@@ -202,6 +202,26 @@ curl.exe -X POST http://127.0.0.1:8080/api/runs/cancel
 
 使用 `Ctrl+C` 停止服务。
 
+可选 token 鉴权检查：
+
+```yaml
+action_server:
+  auth_token: secret-token
+```
+
+启用后，除 `/` 和 `/api/health` 外，其余接口都需要请求头：
+
+```powershell
+curl.exe http://127.0.0.1:8080/api/config
+curl.exe http://127.0.0.1:8080/api/config -H "Authorization: Bearer secret-token"
+```
+
+预期结果：
+
+- 不带 token 请求 `/api/config` 返回 HTTP 401，`error.code = unauthorized`。
+- 带正确 token 请求成功。
+- `/api/config` 中的 `action_server.auth_token` 会脱敏显示为 `***`。
+
 ## 需要记录的信息
 
 人工测试时请记录：

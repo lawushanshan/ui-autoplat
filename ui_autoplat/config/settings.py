@@ -46,6 +46,7 @@ class ActionServerConfig(BaseModel):
     enabled: bool = False
     host: str = "127.0.0.1"
     port: int = 8080
+    auth_token: str | None = None
 
 
 class LoggingConfig(BaseModel):

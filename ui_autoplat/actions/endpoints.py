@@ -175,7 +175,10 @@ def get_stats(days: int = 7) -> dict[str, Any]:
 
 def get_config() -> dict[str, Any]:
     config = load_settings()
-    return config.model_dump()
+    data = config.model_dump()
+    if data.get("action_server", {}).get("auth_token"):
+        data["action_server"]["auth_token"] = "***"
+    return data
 
 
 def _open_history() -> HistoryStore:
