@@ -1022,6 +1022,15 @@ def test_html_report_uses_relative_artifact_links(tmp_path: Path) -> None:
     assert "Other artifacts" in html
     assert 'href="../artifacts/basic/test_smoke/output.robolog"' in html
     assert "Full traceback / raw output" in html
+    assert 'data-status="failed"' in html
+    assert "test_smoke" in html
+    assert "sample_task.py" in html
+    assert "smoke" in html
+    assert "Slowest tests" in html
+    assert f"{test_case.suite_name} / {test_case.name}" in html
+    assert 'data-filter="failed">Failed (1)' in html
+    assert 'id="test-search"' in html
+    assert "No tests match the current filters." in html
 
 
 def test_junit_report_includes_failures_and_artifacts(tmp_path: Path) -> None:

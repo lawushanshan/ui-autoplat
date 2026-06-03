@@ -24,7 +24,21 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
 .fail {{ color: #dc3545; }}
 .skip {{ color: #ffc107; }}
 .error {{ color: #dc3545; }}
+.toolbar {{ background: #fff; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }}
+.filter-buttons {{ display: flex; gap: 6px; flex-wrap: wrap; }}
+.filter-button {{ border: 1px solid #d0d7de; background: #fff; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; color: #333; }}
+.filter-button.active {{ background: #1f6feb; border-color: #1f6feb; color: #fff; }}
+.search-input {{ min-width: 240px; flex: 1; max-width: 420px; border: 1px solid #d0d7de; border-radius: 6px; padding: 7px 10px; font-size: 13px; }}
+.match-count {{ font-size: 13px; color: #666; margin-left: auto; }}
+.slow-section {{ background: #fff; border-radius: 8px; padding: 14px 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+.section-title {{ font-size: 15px; font-weight: 600; margin-bottom: 10px; }}
+.slow-list {{ display: grid; gap: 6px; }}
+.slow-item {{ display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; font-size: 13px; padding: 6px 0; border-top: 1px solid #eee; }}
+.slow-name {{ overflow-wrap: anywhere; }}
+.slow-duration {{ font-family: monospace; color: #555; }}
+.empty-state {{ background: #fff; border-radius: 8px; padding: 18px; color: #666; text-align: center; display: none; }}
 .test-list {{ background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+.test-entry[hidden] {{ display: none; }}
 .test-item {{ padding: 12px 20px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; }}
 .test-item:last-child {{ border-bottom: none; }}
 .test-name {{ font-weight: 500; }}
@@ -65,9 +79,66 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
 </div>
 </div>
 
+<div class="toolbar">
+<div class="filter-buttons" aria-label="Status filters">
+<button class="filter-button active" type="button" data-filter="all">All ({total})</button>
+<button class="filter-button" type="button" data-filter="passed">Passed ({passed})</button>
+<button class="filter-button" type="button" data-filter="failed">Failed ({failed})</button>
+<button class="filter-button" type="button" data-filter="skipped">Skipped ({skipped})</button>
+<button class="filter-button" type="button" data-filter="error">Error ({error})</button>
+</div>
+<input id="test-search" class="search-input" type="search" placeholder="Search by test, suite, tag, or file">
+<div id="match-count" class="match-count">{total} shown</div>
+</div>
+
+{slow_section}
+
 <div class="test-list">
 {test_items}
 </div>
+<div id="empty-state" class="empty-state">No tests match the current filters.</div>
+
+<script>
+(function () {{
+  var currentFilter = "all";
+  var buttons = Array.prototype.slice.call(document.querySelectorAll(".filter-button"));
+  var search = document.getElementById("test-search");
+  var entries = Array.prototype.slice.call(document.querySelectorAll(".test-entry"));
+  var matchCount = document.getElementById("match-count");
+  var emptyState = document.getElementById("empty-state");
+
+  function applyFilters() {{
+    var query = (search.value || "").trim().toLowerCase();
+    var visible = 0;
+
+    entries.forEach(function (entry) {{
+      var status = entry.getAttribute("data-status");
+      var searchText = entry.getAttribute("data-search") || "";
+      var statusMatched = currentFilter === "all" || status === currentFilter;
+      var searchMatched = !query || searchText.indexOf(query) !== -1;
+      var show = statusMatched && searchMatched;
+      entry.hidden = !show;
+      if (show) {{
+        visible += 1;
+      }}
+    }});
+
+    matchCount.textContent = visible + " shown";
+    emptyState.style.display = visible === 0 ? "block" : "none";
+  }}
+
+  buttons.forEach(function (button) {{
+    button.addEventListener("click", function () {{
+      currentFilter = button.getAttribute("data-filter");
+      buttons.forEach(function (item) {{ item.classList.remove("active"); }});
+      button.classList.add("active");
+      applyFilters();
+    }});
+  }});
+
+  search.addEventListener("input", applyFilters);
+}})();
+</script>
 
 </body>
 </html>
@@ -94,7 +165,20 @@ class HTMLReportGenerator:
                 meta_parts.append(f"Case: {case_label}")
             if result.test_case.tags:
                 meta_parts.append(f"Tags: {', '.join(result.test_case.tags)}")
+            search_text = " ".join(
+                [
+                    result.test_case.name,
+                    result.test_case.suite_name,
+                    result.test_case.file_path.name,
+                    " ".join(result.test_case.tags),
+                    result.test_case.case_id or "",
+                    result.test_case.case_name or "",
+                    result.status,
+                ]
+            ).lower()
             item_html = (
+                f'<div class="test-entry" data-status="{result.status}" '
+                f'data-search="{self._escape_html(search_text)}">'
                 f'<div class="test-item">'
                 f'<div>'
                 f'<div class="test-name">{result.test_case.name}</div>'
@@ -124,6 +208,7 @@ class HTMLReportGenerator:
             if result.screenshots or result.log_path or result.video_path or result.artifacts:
                 item_html += self._diagnostics_html(result)
 
+            item_html += "</div>"
             test_items_html.append(item_html)
 
         html = HTML_TEMPLATE.format(
@@ -135,8 +220,10 @@ class HTMLReportGenerator:
             passed=summary.passed,
             failed=summary.failed,
             skipped=summary.skipped,
+            error=summary.error,
             pass_rate=summary.pass_rate,
             duration=f"{summary.duration:.1f}",
+            slow_section=self._slow_section_html(run.results),
             test_items="\n".join(test_items_html),
         )
 
@@ -217,3 +304,26 @@ class HTMLReportGenerator:
     @staticmethod
     def _link_group(links: list[str]) -> str:
         return '<div class="diagnostic-links">' + " ".join(links) + "</div>"
+
+    def _slow_section_html(self, results: list[TestResult]) -> str:
+        slow_results = sorted(results, key=lambda result: result.duration, reverse=True)[:5]
+        if not slow_results:
+            return ""
+
+        items = []
+        for result in slow_results:
+            label = self._escape_html(f"{result.test_case.suite_name} / {result.test_case.name}")
+            items.append(
+                '<div class="slow-item">'
+                f'<div class="slow-name">{label}</div>'
+                f'<div class="slow-duration">{result.duration:.2f}s</div>'
+                '</div>'
+            )
+
+        return (
+            '<div class="slow-section">'
+            '<div class="section-title">Slowest tests</div>'
+            '<div class="slow-list">'
+            + "".join(items)
+            + '</div></div>'
+        )

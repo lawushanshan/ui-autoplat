@@ -217,6 +217,9 @@ Status:
 - Started.
 - `autoplat doctor` added for local environment readiness checks.
 - Manual acceptance checklist added at `docs/manual-acceptance-test.md`.
+- Chinese CI/CD guide added at `docs/ci-cd.md`.
+- GitHub Actions example workflow added at `.github/workflows/autoplat.yml`.
+- Artifact paths, JUnit report usage, exit code behavior, and parallel execution notes documented.
 
 Needs manual/user involvement:
 
@@ -233,6 +236,12 @@ Tasks:
 - Add artifact preview for screenshots.
 - Add historical comparison summary.
 - Add slow-test section.
+
+Status:
+
+- Started.
+- HTML report now includes status filters, search, matched count, empty state, and a slowest-tests section.
+- HTML report shows screenshot previews and groups diagnostic artifacts into primary logs, raw process output, and other artifacts.
 
 Needs manual/user involvement:
 

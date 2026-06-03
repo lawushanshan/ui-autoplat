@@ -1,0 +1,58 @@
+name: ui-autoplat
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[all]
+
+      - name: Install browser
+        run: autoplat browser-install
+
+      - name: Check environment
+        run: autoplat doctor --config examples/page_object/autoplat.yaml
+
+      - name: Run platform tests
+        run: |
+          python -m pytest -q --basetemp .pytest_tmp
+          python -m compileall ui_autoplat tests examples -q
+
+      - name: Run UI example
+        run: autoplat run examples/page_object --config examples/page_object/autoplat.yaml --report all
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autoplat-output
+          path: |
+            examples/page_object/output/
+            output/
+          if-no-files-found: ignore
+
+      - name: Publish JUnit summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-report
+          path: examples/page_object/output/reports/junit.xml
+          if-no-files-found: ignore

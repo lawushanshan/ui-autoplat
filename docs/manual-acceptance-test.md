@@ -78,6 +78,8 @@ autoplat report --format html --output-dir output --open
 
 - 报告能显示通过的用例。
 - 链接没有指向不存在的文件。
+- 顶部筛选按钮、搜索框、匹配数量可见。
+- `Slowest tests` 区域能列出耗时最高的用例。
 
 ## 4. 运行数据驱动示例
 
@@ -127,6 +129,9 @@ autoplat report --format html --output-dir output --open
 人工检查：
 
 - 失败用例和真实错误摘要可见，例如 Playwright timeout。
+- 点击 `Failed` 筛选按钮后，只显示失败用例。
+- 在搜索框输入 `missing_heading` 后，仍能筛选出失败用例。
+- 输入不存在的关键字后，页面显示空结果提示。
 - `Full traceback / raw output` 可以展开查看完整原始输出。
 - `Screenshots` 区域展示截图缩略图，点击可以打开原图。
 - `Primary logs`、`Raw process output`、`Other artifacts` 分组可见。

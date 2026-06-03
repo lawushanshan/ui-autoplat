@@ -129,6 +129,14 @@ autoplat doctor --config examples/page_object/autoplat.yaml
 
 See [docs/manual-acceptance-test.md](docs/manual-acceptance-test.md).
 
+CI/CD integration:
+
+```bash
+autoplat run examples/page_object --config examples/page_object/autoplat.yaml --report all
+```
+
+See [docs/ci-cd.md](docs/ci-cd.md) and [.github/workflows/autoplat.yml](.github/workflows/autoplat.yml).
+
 ## Roadmap
 
 See [docs/iteration-roadmap.md](docs/iteration-roadmap.md).
