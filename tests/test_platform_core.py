@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from http.server import HTTPServer
 from pathlib import Path
 import time
 import sys
 import types
 import subprocess
+import json
+import threading
+from urllib.error import HTTPError
+from urllib.request import urlopen
 from xml.etree import ElementTree as ET
 
 from ui_autoplat.actions import endpoints
@@ -475,6 +480,66 @@ def test_dynamic_route_matching_extracts_params() -> None:
     handler, params = matched
     assert params == {"run_id": "abc123"}
     assert handler(**params) == {"run_id": "abc123"}
+
+
+def test_api_http_server_returns_structured_errors(tmp_path: Path, monkeypatch) -> None:
+    config_file = tmp_path / "autoplat.yaml"
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    config_file.write_text(
+        f"""
+output:
+  dir: {tmp_path / "output"}
+discovery:
+  paths:
+    - {tests_dir}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    APIRequestHandler._routes.clear()
+    from ui_autoplat.actions import endpoints as api_endpoints
+
+    APIRequestHandler.register("/api/health", api_endpoints.get_health)
+    APIRequestHandler.register("/api/runs/{run_id}", api_endpoints.get_run_results)
+    APIRequestHandler.register("/api/stats", api_endpoints.get_stats)
+
+    server = HTTPServer(("127.0.0.1", 0), APIRequestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        health = _http_json(f"{base_url}/api/health")
+        assert health["status"] == "ok"
+
+        missing = _http_json_error(f"{base_url}/api/runs/missing")
+        assert missing["status"] == 404
+        assert missing["body"]["error"]["code"] == "run_not_found"
+
+        invalid = _http_json_error(f"{base_url}/api/stats?days=abc")
+        assert invalid["status"] == 400
+        assert invalid["body"]["error"]["code"] == "invalid_parameter"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def _http_json(url: str) -> dict:
+    with urlopen(url, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _http_json_error(url: str) -> dict:
+    try:
+        _http_json(url)
+    except HTTPError as exc:
+        return {
+            "status": exc.code,
+            "body": json.loads(exc.read().decode("utf-8")),
+        }
+    raise AssertionError(f"Expected HTTP error for {url}")
 
 
 def test_data_driven_discovery_and_in_process_execution(tmp_path: Path) -> None:

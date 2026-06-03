@@ -8,10 +8,19 @@ from typing import Any
 from ui_autoplat.config.loader import load_settings
 from ui_autoplat.core.models import TestRun, TestSuite
 from ui_autoplat.core.registry import discover_tests
+from ui_autoplat.actions.server import APIError
 from ui_autoplat.reporting.history import HistoryStore
 
 _last_run: TestRun | None = None
 _run_lock = threading.Lock()
+
+
+def get_health() -> dict[str, Any]:
+    config = load_settings()
+    return {
+        "status": "ok",
+        "output_dir": str(config.output.dir),
+    }
 
 
 def trigger_test_run(
@@ -23,7 +32,11 @@ def trigger_test_run(
     global _last_run
 
     config = load_settings()
+    if not suite_path:
+        raise APIError(400, "missing_suite_path", "suite_path is required")
     target = Path(suite_path)
+    if not target.exists():
+        raise APIError(404, "suite_path_not_found", f"Suite path not found: {suite_path}")
 
     filter_tags = [t.strip() for t in tags.split(",")] if tags else None
     suites = discover_tests(paths=[target], tags=filter_tags)
@@ -32,6 +45,8 @@ def trigger_test_run(
     if task_name:
         all_tests = [tc for tc in all_tests if tc.name == task_name or tc.name.startswith(f"{task_name}[")]
         suites = _filter_suites_to_tests(suites, all_tests)
+        if not all_tests:
+            raise APIError(404, "test_not_found", f"Test not found: {task_name}")
 
     from ui_autoplat.core.runner import TestRunner
 
@@ -49,7 +64,7 @@ def get_latest_run() -> dict[str, Any]:
 
     persisted = _read_history_run()
     if persisted is None:
-        return {"error": "No runs recorded yet"}
+        raise APIError(404, "run_not_found", "No runs recorded yet")
     return _history_run_to_dict(persisted)
 
 
@@ -59,13 +74,15 @@ def get_run_results(run_id: str) -> dict[str, Any]:
 
     persisted = _read_history_run(run_id=run_id)
     if persisted is None:
-        return {"error": f"Run {run_id} not found"}
+        raise APIError(404, "run_not_found", f"Run {run_id} not found")
     return _history_run_to_dict(persisted)
 
 
 def list_test_suites(suite_path: str = "./tests") -> dict[str, Any]:
     config = load_settings()
     target = Path(suite_path)
+    if not target.exists():
+        raise APIError(404, "suite_path_not_found", f"Suite path not found: {suite_path}")
     suites = discover_tests(paths=[target])
 
     result = []
@@ -93,6 +110,7 @@ def list_test_suites(suite_path: str = "./tests") -> dict[str, Any]:
 
 def get_history(test_name: str | None = None, days: int = 30) -> dict[str, Any]:
     config = load_settings()
+    days = _parse_positive_int(days, "days")
     history = HistoryStore(db_path=config.output.dir / "history.db")
 
     if test_name:
@@ -110,6 +128,7 @@ def get_history(test_name: str | None = None, days: int = 30) -> dict[str, Any]:
 
 def get_stats(days: int = 7) -> dict[str, Any]:
     config = load_settings()
+    days = _parse_positive_int(days, "days")
     history = HistoryStore(db_path=config.output.dir / "history.db")
     stats = history.get_stats(days=days)
     history.close()
@@ -239,3 +258,13 @@ def _loads_json_dict(value: Any) -> dict[str, Any] | None:
     if not isinstance(data, dict):
         return None
     return data
+
+
+def _parse_positive_int(value: Any, name: str) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise APIError(400, "invalid_parameter", f"{name} must be an integer") from exc
+    if parsed <= 0:
+        raise APIError(400, "invalid_parameter", f"{name} must be greater than 0")
+    return parsed

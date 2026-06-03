@@ -8,6 +8,14 @@ from urllib.parse import parse_qs, urlparse
 from ui_autoplat.config.settings import Settings
 
 
+class APIError(Exception):
+    def __init__(self, status_code: int, code: str, message: str) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+
+
 class APIRequestHandler(BaseHTTPRequestHandler):
     _routes: dict[tuple[str, str], tuple[Callable, str]] = {}
 
@@ -29,11 +37,16 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 response = handler(**flat_params)
                 self._send_json(200, response)
             except TypeError as e:
-                self._send_json(400, {"error": f"Invalid parameters: {e}"})
+                self._send_api_error(APIError(400, "invalid_parameters", str(e)))
+            except APIError as e:
+                self._send_api_error(e)
             except Exception as e:
-                self._send_json(500, {"error": str(e)})
+                self._send_api_error(APIError(500, "internal_error", str(e)))
         else:
-            self._send_json(404, {"error": f"Not found: {path}", "available": [p for m, p in self._routes]})
+            self._send_api_error(
+                APIError(404, "not_found", f"Route not found: {path}"),
+                extra={"available": [p for m, p in self._routes]},
+            )
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
@@ -57,11 +70,13 @@ class APIRequestHandler(BaseHTTPRequestHandler):
                 response = handler(**body)
                 self._send_json(200, response)
             except TypeError as e:
-                self._send_json(400, {"error": f"Invalid parameters: {e}"})
+                self._send_api_error(APIError(400, "invalid_parameters", str(e)))
+            except APIError as e:
+                self._send_api_error(e)
             except Exception as e:
-                self._send_json(500, {"error": str(e)})
+                self._send_api_error(APIError(500, "internal_error", str(e)))
         else:
-            self._send_json(404, {"error": f"Not found: {path}"})
+            self._send_api_error(APIError(404, "not_found", f"Route not found: {path}"))
 
     def _send_json(self, code: int, data: Any) -> None:
         response_body = json.dumps(data, ensure_ascii=False, default=str).encode("utf-8")
@@ -71,6 +86,17 @@ class APIRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(response_body)
+
+    def _send_api_error(self, error: APIError, extra: dict[str, Any] | None = None) -> None:
+        body: dict[str, Any] = {
+            "error": {
+                "code": error.code,
+                "message": error.message,
+            }
+        }
+        if extra:
+            body.update(extra)
+        self._send_json(error.status_code, body)
 
     @classmethod
     def _match_route(cls, method: str, path: str) -> tuple[Callable, dict[str, str]] | None:
@@ -113,6 +139,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
 def start_server(host: str = "127.0.0.1", port: int = 8080) -> None:
     from ui_autoplat.actions import endpoints as ep
 
+    APIRequestHandler.register("/api/health", ep.get_health)
     APIRequestHandler.register("/api/runs/latest", ep.get_latest_run)
     APIRequestHandler.register("/api/runs/{run_id}", ep.get_run_results)
     APIRequestHandler.register("/api/runs", ep.trigger_test_run, method="POST")
@@ -126,6 +153,7 @@ def start_server(host: str = "127.0.0.1", port: int = 8080) -> None:
         "version": "0.1.0",
         "endpoints": [
             {"method": "GET", "path": "/api/runs/latest", "description": "Get latest test run results"},
+            {"method": "GET", "path": "/api/health", "description": "Health check"},
             {"method": "GET", "path": "/api/runs/{run_id}", "description": "Get results by run ID"},
             {"method": "POST", "path": "/api/runs", "description": "Trigger a new test run", "body": {"suite_path": "str", "tags": "str?", "task_name": "str?"}},
             {"method": "GET", "path": "/api/suites", "description": "List discovered test suites"},

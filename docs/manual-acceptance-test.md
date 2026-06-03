@@ -165,17 +165,21 @@ autoplat serve --host 127.0.0.1 --port 8080
 
 ```powershell
 curl.exe http://127.0.0.1:8080/
+curl.exe http://127.0.0.1:8080/api/health
 curl.exe http://127.0.0.1:8080/api/config
 curl.exe "http://127.0.0.1:8080/api/suites?suite_path=."
 curl.exe http://127.0.0.1:8080/api/runs/latest
+curl.exe "http://127.0.0.1:8080/api/stats?days=abc"
 ```
 
 预期结果：
 
 - `/` 列出可用 endpoint。
+- `/api/health` 返回 `{"status": "ok", ...}`。
 - `/api/config` 返回有效配置。
 - `/api/suites` 列出 `test_missing_heading`。
 - `/api/runs/latest` 返回最近一次持久化运行，或者返回明确的 `No runs recorded yet` 信息。
+- `/api/stats?days=abc` 返回 HTTP 400，并包含结构化错误：`error.code = invalid_parameter`。
 
 使用 `Ctrl+C` 停止服务。
 

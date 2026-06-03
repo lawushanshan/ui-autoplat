@@ -196,6 +196,15 @@ Tasks:
 - Add optional auth/token support.
 - Add API tests using a local HTTP server.
 
+Status:
+
+- Started.
+- Added structured API errors with HTTP status codes.
+- Added `/api/health`.
+- Added parameter validation for `days` query values.
+- Added path/run-not-found handling with 404 responses.
+- Added local HTTP server tests for health, 400, and 404 responses.
+
 Needs manual/user involvement:
 
 - No initially.
