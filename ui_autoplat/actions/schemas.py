@@ -1,16 +1,39 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-class TriggerRunRequest:
+
+class TriggerRunRequest(BaseModel):
     """Request body for triggering a test run."""
 
-    def __init__(self, suite_path: str, tags: list[str] | None = None, task_name: str | None = None) -> None:
-        self.suite_path = suite_path
-        self.tags = tags or []
-        self.task_name = task_name
+    suite_path: str = Field(min_length=1)
+    tags: str | list[str] | None = None
+    task_name: str | None = None
+    async_run: bool = False
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("suite_path", "task_name")
+    @classmethod
+    def _strip_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        if not text:
+            raise ValueError("must not be empty")
+        return text
+
+    @field_validator("tags")
+    @classmethod
+    def _normalize_tags(cls, value: str | list[str] | None) -> str | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            tags = [tag.strip() for tag in value.split(",") if tag.strip()]
+        else:
+            tags = [str(tag).strip() for tag in value if str(tag).strip()]
+        return ",".join(tags) if tags else None
 
 
 class TriggerRunResponse:

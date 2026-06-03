@@ -5,6 +5,8 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
+from pydantic import ValidationError
+
 from ui_autoplat.config.settings import Settings
 
 
@@ -69,7 +71,7 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             try:
                 body = json.loads(raw.decode("utf-8"))
             except json.JSONDecodeError:
-                self._send_json(400, {"error": "Invalid JSON body"})
+                self._send_api_error(APIError(400, "invalid_json", "Invalid JSON body"))
                 return
 
         route = self._match_route("POST", path)
@@ -77,10 +79,16 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             handler, route_params = route
             try:
                 body.update(route_params)
+                body = self._validate_body(path, body)
                 response = handler(**body)
                 self._send_json(200, response)
             except TypeError as e:
                 self._send_api_error(APIError(400, "invalid_parameters", str(e)))
+            except ValidationError as e:
+                self._send_api_error(
+                    APIError(400, "validation_error", "Request body validation failed"),
+                    extra={"details": _format_validation_errors(e)},
+                )
             except APIError as e:
                 self._send_api_error(e)
             except Exception as e:
@@ -115,6 +123,13 @@ class APIRequestHandler(BaseHTTPRequestHandler):
             return True
         expected = f"Bearer {self._auth_token}"
         return self.headers.get("Authorization") == expected
+
+    def _validate_body(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        if path == "/api/runs":
+            from ui_autoplat.actions.schemas import TriggerRunRequest
+
+            return TriggerRunRequest.model_validate(body).model_dump()
+        return body
 
     @classmethod
     def _match_route(cls, method: str, path: str) -> tuple[Callable, dict[str, str]] | None:
@@ -152,6 +167,16 @@ class APIRequestHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format: str, *args: Any) -> None:
         pass
+
+
+def _format_validation_errors(exc: ValidationError) -> list[dict[str, str]]:
+    details = []
+    for error in exc.errors():
+        details.append({
+            "field": ".".join(str(part) for part in error["loc"]),
+            "message": error["msg"],
+        })
+    return details
 
 
 def start_server(host: str = "127.0.0.1", port: int = 8080) -> None:

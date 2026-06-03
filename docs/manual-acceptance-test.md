@@ -200,6 +200,23 @@ curl.exe -X POST http://127.0.0.1:8080/api/runs/cancel
 - 取消请求会设置 `cancel_requested: true`。
 - 当前版本采用协作式取消：不会强制杀掉已经开始执行的用例、线程或浏览器进程，但会在用例之间停止后续执行，并将剩余用例标记为 skipped。
 
+请求体校验检查：
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8080/api/runs `
+  -H "Content-Type: application/json" `
+  -d "{}"
+curl.exe -X POST http://127.0.0.1:8080/api/runs `
+  -H "Content-Type: application/json" `
+  -d "{\"suite_path\":\".\",\"unexpected\":true}"
+```
+
+预期结果：
+
+- 缺少 `suite_path` 返回 HTTP 400，`error.code = validation_error`。
+- 未声明字段返回 HTTP 400，`error.code = validation_error`。
+- `tags` 支持字符串形式 `"smoke,P1"`，也支持数组形式 `["smoke","P1"]`。
+
 使用 `Ctrl+C` 停止服务。
 
 可选 token 鉴权检查：

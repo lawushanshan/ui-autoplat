@@ -214,6 +214,8 @@ Status:
 - Added optional bearer-token authentication for API endpoints.
 - Kept `/` and `/api/health` public for discovery and health checks.
 - Redacted `action_server.auth_token` from `/api/config`.
+- Added Pydantic request validation for `POST /api/runs`.
+- Unknown request fields and missing `suite_path` now return structured 400 errors.
 
 Needs manual/user involvement:
 

@@ -594,6 +594,69 @@ output:
         APIRequestHandler._auth_token = None
 
 
+def test_api_run_request_body_is_validated(tmp_path: Path, monkeypatch) -> None:
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tmp_path / "autoplat.yaml").write_text(
+        f"""
+output:
+  dir: {tmp_path / "output"}
+discovery:
+  paths:
+    - {tests_dir}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    APIRequestHandler._routes.clear()
+    APIRequestHandler._auth_token = None
+    from ui_autoplat.actions import endpoints as api_endpoints
+
+    APIRequestHandler.register("/api/runs", api_endpoints.trigger_test_run, method="POST")
+
+    server = HTTPServer(("127.0.0.1", 0), APIRequestHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        missing = _http_json_error(
+            f"{base_url}/api/runs",
+            method="POST",
+            data={},
+        )
+        assert missing["status"] == 400
+        assert missing["body"]["error"]["code"] == "validation_error"
+        assert missing["body"]["details"][0]["field"] == "suite_path"
+
+        extra = _http_json_error(
+            f"{base_url}/api/runs",
+            method="POST",
+            data={"suite_path": str(tests_dir), "unexpected": True},
+        )
+        assert extra["status"] == 400
+        assert extra["body"]["error"]["code"] == "validation_error"
+
+        invalid_json = _http_json_error(
+            f"{base_url}/api/runs",
+            method="POST",
+            data="{not valid json",
+        )
+        assert invalid_json["status"] == 400
+        assert invalid_json["body"]["error"]["code"] == "invalid_json"
+
+        accepted = _http_json(
+            f"{base_url}/api/runs",
+            method="POST",
+            data={"suite_path": str(tests_dir), "tags": ["smoke", "P1"], "async_run": False},
+        )
+        assert accepted["total"] == 0
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_api_async_run_reports_running_and_blocks_second_run(
     tmp_path: Path,
     monkeypatch,
@@ -760,15 +823,33 @@ def test_api_cancel_rejects_when_no_run_is_active() -> None:
         raise AssertionError("Expected cancel without active run to be rejected")
 
 
-def _http_json(url: str, headers: dict[str, str] | None = None) -> dict:
-    request = Request(url, headers=headers or {})
+def _http_json(
+    url: str,
+    headers: dict[str, str] | None = None,
+    method: str = "GET",
+    data: dict | str | None = None,
+) -> dict:
+    body = None
+    request_headers = dict(headers or {})
+    if data is not None:
+        if isinstance(data, str):
+            body = data.encode("utf-8")
+        else:
+            body = json.dumps(data).encode("utf-8")
+        request_headers.setdefault("Content-Type", "application/json")
+    request = Request(url, data=body, headers=request_headers, method=method)
     with urlopen(request, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _http_json_error(url: str, headers: dict[str, str] | None = None) -> dict:
+def _http_json_error(
+    url: str,
+    headers: dict[str, str] | None = None,
+    method: str = "GET",
+    data: dict | str | None = None,
+) -> dict:
     try:
-        _http_json(url, headers=headers)
+        _http_json(url, headers=headers, method=method, data=data)
     except HTTPError as exc:
         return {
             "status": exc.code,
