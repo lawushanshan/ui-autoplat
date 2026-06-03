@@ -234,14 +234,14 @@ def _execute_suites(config: Any, suites: list[TestSuite]) -> TestRun:
     from ui_autoplat.core.runner import TestRunner
 
     with _run_lock:
-        runner = TestRunner(config=config)
+        runner = TestRunner(config=config, should_cancel=_is_cancellation_requested)
         run = runner.run(suites)
         _last_run = run
 
     with _status_lock:
         final_status = "completed" if not run.has_failures else "failed"
         if _run_status.cancel_requested:
-            final_status = "cancel_requested"
+            final_status = "cancelled"
         _set_run_status_locked(
             status=final_status,
             run_id=run.id,
@@ -257,6 +257,11 @@ def _run_suites_background(config: Any, suites: list[TestSuite]) -> None:
     except Exception as exc:
         with _status_lock:
             _set_run_status_locked(status="error", error=str(exc), finished_at=datetime.now())
+
+
+def _is_cancellation_requested() -> bool:
+    with _status_lock:
+        return _run_status.cancel_requested
 
 
 def _set_run_status_locked(

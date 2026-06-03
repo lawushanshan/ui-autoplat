@@ -470,6 +470,28 @@ def test_parallel_subprocess_results_keep_discovery_order(tmp_path: Path, monkey
     ]
 
 
+def test_runner_skips_remaining_tests_after_cooperative_cancel(tmp_path: Path) -> None:
+    task_file = tmp_path / "sample_task.py"
+    _write_task_file(task_file)
+    suites = discover_tests([tmp_path])
+    settings = Settings.model_validate(
+        {
+            "execution": {"mode": "in-process"},
+            "output": {"dir": tmp_path / "output"},
+        }
+    )
+    calls = {"count": 0}
+
+    def should_cancel() -> bool:
+        calls["count"] += 1
+        return calls["count"] > 1
+
+    run = AutoplatTestRunner(settings, should_cancel=should_cancel).run(suites)
+
+    assert [result.status for result in run.results] == ["passed", "skipped"]
+    assert str(run.results[1].error) == "Cancelled by request"
+
+
 def test_dynamic_route_matching_extracts_params() -> None:
     APIRequestHandler._routes.clear()
     APIRequestHandler.register("/api/runs/{run_id}", lambda run_id: {"run_id": run_id})
@@ -650,7 +672,7 @@ output:
         run = AutoplatTestRun(environment=EnvironmentInfo.capture(), results=[result])
         api_endpoints._last_run = run
         with api_endpoints._status_lock:
-            final_status = "cancel_requested" if api_endpoints._run_status.cancel_requested else "completed"
+            final_status = "cancelled" if api_endpoints._run_status.cancel_requested else "completed"
             api_endpoints._set_run_status_locked(
                 status=final_status,
                 run_id=run.id,
@@ -672,12 +694,12 @@ output:
     release.set()
     deadline = time.time() + 5
     while time.time() < deadline:
-        if api_endpoints.get_run_status()["status"] == "cancel_requested":
+        if api_endpoints.get_run_status()["status"] == "cancelled":
             break
         time.sleep(0.05)
 
     status = api_endpoints.get_run_status()
-    assert status["status"] == "cancel_requested"
+    assert status["status"] == "cancelled"
     assert status["cancel_requested"] is True
     assert status["run_id"] is not None
 

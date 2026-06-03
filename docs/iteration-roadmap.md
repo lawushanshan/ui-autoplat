@@ -208,7 +208,9 @@ Status:
 - Added optional async run trigger through `POST /api/runs` with `async_run: true`.
 - Added 409 conflict handling when another run is already in progress.
 - Added `POST /api/runs/cancel` to record cancellation requests.
-- Documented current cancellation semantics as status-only, without force-killing active work.
+- Documented current cancellation semantics as cooperative cancellation without force-killing the active test.
+- Runner now supports cooperative cancellation between tests.
+- Remaining tests are marked skipped with `Cancelled by request` after cancellation is requested.
 
 Needs manual/user involvement:
 

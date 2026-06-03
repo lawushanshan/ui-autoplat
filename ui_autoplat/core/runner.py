@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ui_autoplat.browser.manager import BrowserManager
 from ui_autoplat.config.settings import Settings
@@ -34,6 +34,7 @@ class TestRunner:
         self,
         config: Settings,
         collector: TestResultCollector | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> None:
         self._config = config
         self._collector = collector or TestResultCollector(config.output)
@@ -42,6 +43,7 @@ class TestRunner:
         self._context = TestContext(config=config)
         self._browser_mgr = BrowserManager(config.browser, output_dir=config.output.dir)
         self._results: list[TestResult] = []
+        self._should_cancel = should_cancel or (lambda: False)
 
     @property
     def results(self) -> list[TestResult]:
@@ -67,7 +69,11 @@ class TestRunner:
             self._browser_mgr.configure()
             self._fixture_mgr.run_setup("suite", self._context)
             try:
-                for test in all_tests:
+                for index, test in enumerate(all_tests):
+                    if self._should_cancel():
+                        self._record_cancelled_results(all_tests[index:])
+                        break
+
                     result = self._execute_in_process(test)
                     self._record_result(result)
 
@@ -99,7 +105,11 @@ class TestRunner:
         self._console.test_finished(result)
 
     def _run_subprocess_sequential(self, tests: list[TestCase]) -> None:
-        for test in tests:
+        for index, test in enumerate(tests):
+            if self._should_cancel():
+                self._record_cancelled_results(tests[index:])
+                break
+
             result = self._execute_subprocess(test)
             self._record_result(result)
 
@@ -108,6 +118,10 @@ class TestRunner:
                 break
 
     def _run_subprocess_parallel(self, tests: list[TestCase]) -> None:
+        if self._should_cancel():
+            self._record_cancelled_results(tests)
+            return
+
         max_workers = min(self._config.execution.max_parallel, len(tests))
         ordered_results: list[TestResult | None] = [None] * len(tests)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -124,6 +138,13 @@ class TestRunner:
 
     def run_single(self, test: TestCase) -> TestResult:
         self._console.test_started(test)
+
+        if self._should_cancel():
+            result = self._skipped_result_with_reason(test, "Cancelled by request")
+            self._results.append(result)
+            self._collector.add_result(result)
+            self._console.test_finished(result)
+            return result
 
         if self._config.execution.mode == "subprocess":
             result = self._execute_subprocess(test)
@@ -304,6 +325,9 @@ class TestRunner:
         return last_result  # type: ignore[return-value]
 
     def _skipped_result(self, test: TestCase) -> TestResult:
+        return self._skipped_result_with_reason(test, test.skip_reason or "Skipped")
+
+    def _skipped_result_with_reason(self, test: TestCase, reason: str) -> TestResult:
         now = datetime.now()
         return TestResult(
             test_case=test,
@@ -311,9 +335,13 @@ class TestRunner:
             start_time=now,
             end_time=now,
             duration=0.0,
-            error=TestExecutionError(test.skip_reason or "Skipped"),
-            error_traceback=test.skip_reason,
+            error=TestExecutionError(reason),
+            error_traceback=reason,
         )
+
+    def _record_cancelled_results(self, tests: list[TestCase]) -> None:
+        for test in tests:
+            self._record_result(self._skipped_result_with_reason(test, "Cancelled by request"))
 
     def _attach_in_process_artifacts(self, result: TestResult) -> None:
         if result.status not in ("failed", "error"):

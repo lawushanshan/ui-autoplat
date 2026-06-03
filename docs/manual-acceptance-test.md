@@ -198,7 +198,7 @@ curl.exe -X POST http://127.0.0.1:8080/api/runs/cancel
 - POST 请求立即返回 `accepted: true`。
 - 运行中再次触发运行会返回 HTTP 409，`error.code = run_already_in_progress`。
 - 取消请求会设置 `cancel_requested: true`。
-- 当前版本的取消是“请求取消并记录状态”，不会强制杀掉已经在执行的线程或浏览器进程。
+- 当前版本采用协作式取消：不会强制杀掉已经开始执行的用例、线程或浏览器进程，但会在用例之间停止后续执行，并将剩余用例标记为 skipped。
 
 使用 `Ctrl+C` 停止服务。
 
