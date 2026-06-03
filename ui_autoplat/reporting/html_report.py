@@ -34,11 +34,19 @@ body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans
 .status-failed {{ background: #dc3545; }}
 .status-skipped {{ background: #ffc107; color: #333; }}
 .status-error {{ background: #dc3545; }}
-.error-detail {{ background: #fff0f0; padding: 10px 20px; border-bottom: 1px solid #eee; font-family: monospace; font-size: 13px; white-space: pre-wrap; color: #c00; }}
-.artifact-list {{ background: #fafafa; padding: 10px 20px 14px 20px; border-bottom: 1px solid #eee; font-size: 13px; }}
-.artifact-list a {{ color: #2563eb; text-decoration: none; margin-right: 12px; }}
-.artifact-list a:hover {{ text-decoration: underline; }}
-.screenshot {{ max-width: 100%; border: 1px solid #ddd; border-radius: 4px; margin-top: 8px; }}
+.error-summary {{ background: #fff0f0; padding: 10px 20px; border-bottom: 1px solid #eee; font-family: monospace; font-size: 13px; white-space: pre-wrap; color: #c00; }}
+.traceback-detail {{ background: #fff; border-bottom: 1px solid #eee; padding: 10px 20px; }}
+.traceback-detail summary {{ cursor: pointer; color: #555; font-size: 13px; }}
+.traceback-detail pre {{ overflow-x: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.45; color: #444; background: #f8f9fa; padding: 10px; border-radius: 4px; }}
+.diagnostics {{ background: #fafafa; padding: 12px 20px 16px 20px; border-bottom: 1px solid #eee; font-size: 13px; }}
+.diagnostic-group {{ margin-top: 10px; }}
+.diagnostic-title {{ font-weight: 600; color: #444; margin-bottom: 6px; }}
+.diagnostic-links a {{ color: #2563eb; text-decoration: none; margin-right: 12px; display: inline-block; margin-bottom: 4px; }}
+.diagnostic-links a:hover {{ text-decoration: underline; }}
+.screenshot-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 240px)); gap: 12px; }}
+.screenshot-card {{ display: block; color: #2563eb; text-decoration: none; }}
+.screenshot-card img {{ width: 100%; max-height: 160px; object-fit: contain; border: 1px solid #ddd; border-radius: 4px; background: #fff; }}
+.screenshot-card span {{ display: block; margin-top: 4px; overflow-wrap: anywhere; }}
 .env-info {{ margin-top: 10px; font-size: 12px; color: #666; }}
 </style>
 </head>
@@ -99,32 +107,22 @@ class HTMLReportGenerator:
                 f'</div></div>'
             )
 
-            if result.error_traceback:
+            if result.error:
                 item_html += (
-                    f'<div class="error-detail" id="{error_id}">'
-                    f"{self._escape_html(result.error_traceback)}"
-                    f'</div>'
-                )
-            elif result.error:
-                item_html += (
-                    f'<div class="error-detail" id="{error_id}">'
+                    f'<div class="error-summary" id="{error_id}">'
                     f"{self._escape_html(str(result.error))}"
                     f'</div>'
                 )
+            if result.error_traceback:
+                item_html += (
+                    f'<details class="traceback-detail">'
+                    f'<summary>Full traceback / raw output</summary>'
+                    f'<pre>{self._escape_html(result.error_traceback)}</pre>'
+                    f'</details>'
+                )
 
             if result.screenshots or result.log_path or result.video_path or result.artifacts:
-                links = []
-                for screenshot in result.screenshots:
-                    links.append(self._artifact_link("screenshot", screenshot))
-                if result.log_path:
-                    links.append(self._artifact_link("log", result.log_path))
-                if result.video_path:
-                    links.append(self._artifact_link("video", result.video_path))
-                for artifact in result.artifacts:
-                    if artifact in result.screenshots or artifact == result.log_path or artifact == result.video_path:
-                        continue
-                    links.append(self._artifact_link(artifact.name, artifact))
-                item_html += f'<div class="artifact-list">Artifacts: {" ".join(links)}</div>'
+                item_html += self._diagnostics_html(result)
 
             test_items_html.append(item_html)
 
@@ -157,3 +155,65 @@ class HTMLReportGenerator:
             href = str(path)
         href = self._escape_html(href.replace("\\", "/"))
         return f'<a href="{href}">{self._escape_html(label)}</a>'
+
+    def _diagnostics_html(self, result: TestResult) -> str:
+        groups = []
+
+        if result.screenshots:
+            cards = []
+            for screenshot in result.screenshots:
+                href = self._artifact_href(screenshot)
+                label = self._escape_html(screenshot.name)
+                cards.append(
+                    f'<a class="screenshot-card" href="{href}">'
+                    f'<img src="{href}" alt="{label}">'
+                    f'<span>{label}</span>'
+                    f'</a>'
+                )
+            groups.append(self._diagnostic_group("Screenshots", '<div class="screenshot-grid">' + "".join(cards) + "</div>"))
+
+        primary_links = []
+        if result.log_path:
+            primary_links.append(self._artifact_link("Robocorp log", result.log_path))
+        if result.video_path:
+            primary_links.append(self._artifact_link("Video", result.video_path))
+        if primary_links:
+            groups.append(self._diagnostic_group("Primary logs", self._link_group(primary_links)))
+
+        stdout_stderr = []
+        other_artifacts = []
+        seen = set(result.screenshots)
+        if result.log_path:
+            seen.add(result.log_path)
+        if result.video_path:
+            seen.add(result.video_path)
+
+        for artifact in result.artifacts:
+            if artifact in seen:
+                continue
+            if artifact.name in {"stdout.log", "stderr.log"}:
+                stdout_stderr.append(self._artifact_link(artifact.name, artifact))
+            else:
+                other_artifacts.append(self._artifact_link(artifact.name, artifact))
+
+        if stdout_stderr:
+            groups.append(self._diagnostic_group("Raw process output", self._link_group(stdout_stderr)))
+        if other_artifacts:
+            groups.append(self._diagnostic_group("Other artifacts", self._link_group(other_artifacts)))
+
+        return '<div class="diagnostics">' + "".join(groups) + "</div>"
+
+    def _artifact_href(self, path: Path) -> str:
+        try:
+            href = os.path.relpath(path, self._output_dir)
+        except ValueError:
+            href = str(path)
+        return self._escape_html(href.replace("\\", "/"))
+
+    @staticmethod
+    def _diagnostic_group(title: str, body: str) -> str:
+        return f'<div class="diagnostic-group"><div class="diagnostic-title">{title}</div>{body}</div>'
+
+    @staticmethod
+    def _link_group(links: list[str]) -> str:
+        return '<div class="diagnostic-links">' + " ".join(links) + "</div>"

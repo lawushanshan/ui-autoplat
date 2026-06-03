@@ -42,12 +42,12 @@ class ConsoleReporter:
         else:
             self._failed += 1
             print(f"  {_COLOR_RED}FAIL{_COLOR_RESET} {name} ({duration_str})")
-            if result.error_traceback:
+            if result.error:
+                print(f"       {result.error}")
+            elif result.error_traceback:
                 lines = result.error_traceback.strip().split("\n")
                 for line in lines[-3:]:
                     print(f"       {line}")
-            elif result.error:
-                print(f"       {type(result.error).__name__}: {result.error}")
 
     def run_finished(self, results: list[TestResult]) -> None:
         summary = TestRunSummary.from_results(results)

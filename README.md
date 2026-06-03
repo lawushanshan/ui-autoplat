@@ -36,6 +36,12 @@ Validate config:
 autoplat config validate --config examples/page_object/autoplat.yaml
 ```
 
+Check the local environment:
+
+```bash
+autoplat doctor --config examples/page_object/autoplat.yaml
+```
+
 Run an example:
 
 ```bash
@@ -114,6 +120,14 @@ Run tests and compile checks:
 python -m pytest -q --basetemp .pytest_tmp
 python -m compileall ui_autoplat tests examples -q
 ```
+
+Manual acceptance testing:
+
+```bash
+autoplat doctor --config examples/page_object/autoplat.yaml
+```
+
+See [docs/manual-acceptance-test.md](docs/manual-acceptance-test.md).
 
 ## Roadmap
 

@@ -348,6 +348,100 @@ def browser_install() -> None:
 
 
 @cli.command(context_settings=CONTEXT_SETTINGS)
+@click.option("--config", "config_path", type=click.Path(), help="Config file path")
+@click.option("--profile", help="Validate with a named config profile")
+@click.option("--skip-browser", is_flag=True, help="Skip Playwright browser binary checks")
+@click.option("--strict", is_flag=True, help="Exit with failure when warnings are found")
+def doctor(config_path: Optional[str], profile: Optional[str], skip_browser: bool, strict: bool) -> None:
+    """Check whether the local environment is ready to run tests."""
+    import importlib.util
+    import platform
+
+    checks: list[tuple[str, str, str]] = []
+
+    def add(status: str, name: str, detail: str) -> None:
+        checks.append((status, name, detail))
+
+    python_version = sys.version_info
+    python_label = platform.python_version()
+    if python_version >= (3, 10):
+        add("OK", "Python", f"{python_label} >= 3.10")
+    else:
+        add("FAIL", "Python", f"{python_label}; Python 3.10+ is required")
+
+    required_modules = [
+        ("robocorp.tasks", "Robocorp Tasks"),
+        ("robocorp.browser", "Robocorp Browser"),
+        ("playwright.sync_api", "Playwright"),
+        ("pydantic", "Pydantic"),
+        ("yaml", "PyYAML"),
+    ]
+    for module_name, label in required_modules:
+        if importlib.util.find_spec(module_name) is None:
+            add("FAIL", label, f"Python module not importable: {module_name}")
+        else:
+            add("OK", label, f"Python module available: {module_name}")
+
+    settings = None
+    try:
+        settings = _load_settings(config_path, profile, None)
+        add(
+            "OK",
+            "Configuration",
+            (
+                f"mode={settings.execution.mode}, browser={settings.browser.browser_type}, "
+                f"output={settings.output.dir}"
+            ),
+        )
+    except Exception as exc:
+        add("FAIL", "Configuration", str(exc))
+
+    if settings is not None:
+        discovery_errors = _validate_discovery_paths(
+            settings.discovery.paths,
+            _resolve_config_path(config_path).parent,
+            bool(config_path),
+        )
+        if discovery_errors:
+            for error in discovery_errors:
+                add("FAIL", "Discovery", error)
+        else:
+            add("OK", "Discovery", ", ".join(str(path) for path in settings.discovery.paths))
+
+    if skip_browser:
+        add("WARN", "Browser Binary", "Skipped by --skip-browser")
+    elif settings is not None:
+        try:
+            from playwright.sync_api import sync_playwright
+
+            with sync_playwright() as playwright:
+                browser_type = getattr(playwright, settings.browser.browser_type)
+                executable_path = Path(browser_type.executable_path)
+                if executable_path.exists():
+                    add("OK", "Browser Binary", f"{settings.browser.browser_type}: {executable_path}")
+                else:
+                    add(
+                        "WARN",
+                        "Browser Binary",
+                        f"{settings.browser.browser_type} not installed; run `autoplat browser-install`",
+                    )
+        except Exception as exc:
+            add("WARN", "Browser Binary", f"Could not check browser binary: {exc}")
+
+    click.echo("\nDoctor checks:\n")
+    for status, name, detail in checks:
+        click.echo(f"  [{status:<4}] {name:<18} {detail}")
+
+    failures = [check for check in checks if check[0] == "FAIL"]
+    warnings = [check for check in checks if check[0] == "WARN"]
+    if failures or (strict and warnings):
+        click.echo("\nEnvironment is not ready.")
+        sys.exit(1)
+
+    click.echo("\nEnvironment looks ready.")
+
+
+@cli.command(context_settings=CONTEXT_SETTINGS)
 @click.option("--run-id", help="Specific run ID (default: latest)")
 @click.option("--format", "report_format", type=click.Choice(["html", "json", "junit"]), default="html")
 @click.option("--output-dir", type=click.Path(), help="Output directory")

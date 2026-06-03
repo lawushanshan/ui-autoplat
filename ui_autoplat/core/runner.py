@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import shutil
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -197,20 +198,27 @@ class TestRunner:
                     retry_attempt=retry_attempt,
                 )
             else:
+                combined_output = _combine_process_output(proc_result.stdout, proc_result.stderr)
+                error_message = _extract_failure_summary(combined_output) or "Task failed"
                 result = TestResult(
                     test_case=test,
                     status="failed",
                     start_time=start_time,
                     end_time=end_time,
                     duration=duration,
-                    error=TestExecutionError(proc_result.stderr.strip() or "Task failed"),
-                    error_traceback=proc_result.stderr,
+                    error=TestExecutionError(error_message),
+                    error_traceback=combined_output,
                     retry_attempt=retry_attempt,
+                )
+                self._write_subprocess_output_artifacts(
+                    result,
+                    stdout=proc_result.stdout,
+                    stderr=proc_result.stderr,
                 )
                 self._attach_subprocess_artifacts(result)
                 return result
 
-        except subprocess.TimeoutExpired:
+        except subprocess.TimeoutExpired as exc:
             end_time = datetime.now()
             result = TestResult(
                 test_case=test,
@@ -220,6 +228,11 @@ class TestRunner:
                 duration=(end_time - start_time).total_seconds(),
                 error=TestExecutionError(f"Test timed out after {self._config.execution.timeout_per_test}s"),
                 retry_attempt=retry_attempt,
+            )
+            self._write_subprocess_output_artifacts(
+                result,
+                stdout=_decode_process_output(exc.stdout),
+                stderr=_decode_process_output(exc.stderr),
             )
             self._attach_subprocess_artifacts(result)
             return result
@@ -318,8 +331,28 @@ class TestRunner:
             result.screenshots.append(screenshot)
             result.artifacts.append(screenshot)
 
+    def _write_subprocess_output_artifacts(
+        self,
+        result: TestResult,
+        stdout: str | None = None,
+        stderr: str | None = None,
+    ) -> None:
+        artifact_dir = self._artifact_dir(result)
+        outputs = {
+            "stdout.log": stdout,
+            "stderr.log": stderr,
+        }
+        for filename, content in outputs.items():
+            if not content:
+                continue
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            path = artifact_dir / filename
+            path.write_text(content, encoding="utf-8", errors="replace")
+            if path not in result.artifacts:
+                result.artifacts.append(path)
+
     def _attach_subprocess_artifacts(self, result: TestResult) -> None:
-        artifact_dir = self._config.output.dir / "artifacts" / result.test_case.suite_name / result.test_case.name
+        artifact_dir = self._artifact_dir(result)
         source_dirs = [result.test_case.file_path.parent / "output", self._config.output.dir]
         artifact_patterns = ("log.html", "output.robolog", "stderr.log", "stdout.log")
 
@@ -355,6 +388,9 @@ class TestRunner:
             if screenshot not in result.artifacts:
                 result.artifacts.append(screenshot)
 
+    def _artifact_dir(self, result: TestResult) -> Path:
+        return self._config.output.dir / "artifacts" / result.test_case.suite_name / result.test_case.name
+
     def _build_env(self) -> dict[str, str]:
         import os
 
@@ -364,3 +400,97 @@ class TestRunner:
         env["AUTOPLAT_BROWSER_SCREENSHOT"] = self._config.browser.screenshot
         env["AUTOPLAT_BROWSER_SLOWMO"] = str(self._config.browser.slowmo)
         return env
+
+
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+_WARNING_HEADER_RE = re.compile(r"^.+:\d+:\s+Warning:\s+")
+_TRACEBACK_HEADER_RE = re.compile(r"^=+\s+Full Traceback", re.IGNORECASE)
+_NOISE_PATTERNS = (
+    "Usage of the native system certificate stores",
+    "_inject_truststore()",
+)
+
+
+def _combine_process_output(stdout: str | None, stderr: str | None) -> str:
+    parts = []
+    if stdout:
+        parts.append(stdout)
+    if stderr:
+        parts.append(stderr)
+    return "\n".join(parts)
+
+
+def _decode_process_output(value: str | bytes | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def _extract_failure_summary(output: str) -> str | None:
+    clean_lines = _clean_process_output_lines(output)
+    if not clean_lines:
+        return None
+
+    traceback_summary = _extract_traceback_exception(clean_lines)
+    if traceback_summary:
+        return traceback_summary
+
+    for line in clean_lines:
+        if _looks_like_failure_line(line):
+            return line
+
+    return clean_lines[0]
+
+
+def _clean_process_output_lines(output: str) -> list[str]:
+    lines = []
+    for raw_line in output.splitlines():
+        line = _ANSI_ESCAPE_RE.sub("", raw_line).strip()
+        if not line:
+            continue
+        if any(pattern in line for pattern in _NOISE_PATTERNS):
+            continue
+        if _WARNING_HEADER_RE.match(line):
+            continue
+        if set(line) <= {"=", "-"}:
+            continue
+        if line.startswith("Log (html):"):
+            continue
+        if line.startswith("Collecting task "):
+            continue
+        if line.startswith("Running: "):
+            continue
+        if line.endswith(" status: FAIL"):
+            continue
+        lines.append(line)
+    return lines
+
+
+def _extract_traceback_exception(lines: list[str]) -> str | None:
+    in_traceback = False
+    for line in reversed(lines):
+        if _TRACEBACK_HEADER_RE.match(line):
+            break
+        if line.startswith("Traceback "):
+            in_traceback = True
+            break
+        if not in_traceback and _looks_like_exception_line(line):
+            return line
+    return None
+
+
+def _looks_like_failure_line(line: str) -> bool:
+    if _looks_like_exception_line(line):
+        return True
+    return any(marker in line for marker in ("AssertionError", "Timeout", "Error:", "failed", "exceeded"))
+
+
+def _looks_like_exception_line(line: str) -> bool:
+    if line.startswith(("File ", "Call log:", "- waiting for ")):
+        return False
+    if ":" not in line:
+        return False
+    left, _right = line.split(":", 1)
+    return left.endswith(("Error", "Exception")) or "." in left and left.rsplit(".", 1)[-1].endswith("Error")

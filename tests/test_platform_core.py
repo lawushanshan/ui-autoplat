@@ -5,6 +5,7 @@ from pathlib import Path
 import time
 import sys
 import types
+import subprocess
 from xml.etree import ElementTree as ET
 
 from ui_autoplat.actions import endpoints
@@ -21,6 +22,7 @@ from ui_autoplat.reporting.html_report import HTMLReportGenerator
 from ui_autoplat.reporting.history import HistoryStore
 from ui_autoplat.reporting.junit_report import JUnitReportGenerator
 from ui_autoplat.reporting.json_report import JSONReportGenerator
+from ui_autoplat.reporting.console_reporter import ConsoleReporter
 from ui_autoplat.utils.data_driven import load_csv, load_json
 
 MINIMAL_PNG_DATA_URI = (
@@ -842,6 +844,87 @@ def test_subprocess_artifact_collection_extracts_robolog_screenshot(tmp_path: Pa
     assert result.screenshots[0] in result.artifacts
 
 
+def test_subprocess_failure_prefers_real_error_over_stderr_warning(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    task_file = tmp_path / "failure_task.py"
+    _write_task_file(task_file)
+    suites = discover_tests([tmp_path])
+    test_case = suites[0].tests[0]
+    settings = Settings.model_validate(
+        {
+            "execution": {"mode": "subprocess"},
+            "output": {"dir": tmp_path / "output"},
+        }
+    )
+    runner = AutoplatTestRunner(settings)
+
+    stdout = """
+Collecting task test_smoke from: failure_task.py
+======================== Running: test_smoke ========================
+test_smoke status: FAIL
+
+Locator.wait_for: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator("h1").filter(has_text="missing") to be visible
+
+================ Full Traceback (running test_smoke) =================
+Traceback (most recent call last):
+  File "failure_task.py", line 10, in test_smoke
+    locator.wait_for()
+playwright._impl._errors.TimeoutError: Locator.wait_for: Timeout 3000ms exceeded.
+Call log:
+  - waiting for locator("h1").filter(has_text="missing") to be visible
+
+Log (html): output/log.html
+"""
+    stderr = """
+D:\\Python\\Lib\\site-packages\\robocorp\\tasks\\cli.py:65: Warning: Usage of the native system certificate stores can't be enabled
+  _inject_truststore()
+"""
+
+    def fake_run(*args, **kwargs):
+        return subprocess.CompletedProcess(args=args[0], returncode=1, stdout=stdout, stderr=stderr)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = runner._execute_subprocess_once(test_case)
+
+    assert result.status == "failed"
+    assert str(result.error) == (
+        "playwright._impl._errors.TimeoutError: "
+        "Locator.wait_for: Timeout 3000ms exceeded."
+    )
+    assert "Usage of the native system certificate stores" in (result.error_traceback or "")
+
+    artifact_names = {artifact.name for artifact in result.artifacts}
+    assert {"stdout.log", "stderr.log"} <= artifact_names
+    artifact_dir = tmp_path / "output" / "artifacts" / test_case.suite_name / test_case.name
+    assert (artifact_dir / "stdout.log").exists()
+    assert (artifact_dir / "stderr.log").exists()
+
+
+def test_console_reporter_prints_failure_summary_before_traceback(capsys) -> None:
+    task_case = discover_tests([Path("tests/unit")])[0].tests[0]
+    now = datetime.now()
+    result = AutoplatTestResult(
+        test_case=task_case,
+        status="failed",
+        start_time=now,
+        end_time=now,
+        duration=0.1,
+        error=AssertionError("real failure"),
+        error_traceback="warning only",
+    )
+
+    ConsoleReporter().test_finished(result)
+
+    output = capsys.readouterr().out
+    assert "real failure" in output
+    assert "warning only" not in output
+
+
 def test_history_api_preserves_artifact_paths(tmp_path: Path, monkeypatch) -> None:
     task_file = tmp_path / "failing_task.py"
     _write_task_file(task_file)
@@ -904,7 +987,9 @@ def test_html_report_uses_relative_artifact_links(tmp_path: Path) -> None:
     screenshot = tmp_path / "output" / "screenshots" / "failure.png"
     log_path = tmp_path / "output" / "artifacts" / "basic" / "test_smoke" / "log.html"
     extra_artifact = tmp_path / "output" / "artifacts" / "basic" / "test_smoke" / "output.robolog"
-    for artifact in (screenshot, log_path, extra_artifact):
+    stdout_log = tmp_path / "output" / "artifacts" / "basic" / "test_smoke" / "stdout.log"
+    stderr_log = tmp_path / "output" / "artifacts" / "basic" / "test_smoke" / "stderr.log"
+    for artifact in (screenshot, log_path, extra_artifact, stdout_log, stderr_log):
         artifact.parent.mkdir(parents=True, exist_ok=True)
         artifact.write_text("artifact", encoding="utf-8")
 
@@ -916,9 +1001,10 @@ def test_html_report_uses_relative_artifact_links(tmp_path: Path) -> None:
         end_time=now,
         duration=0.1,
         error=AssertionError("boom"),
+        error_traceback="full traceback",
         screenshots=[screenshot],
         log_path=log_path,
-        artifacts=[screenshot, log_path, extra_artifact],
+        artifacts=[screenshot, stdout_log, stderr_log, log_path, extra_artifact],
     )
     run = AutoplatTestRun(environment=EnvironmentInfo.capture(), results=[result])
     settings = Settings.model_validate({"output": {"dir": tmp_path / "output"}})
@@ -927,8 +1013,15 @@ def test_html_report_uses_relative_artifact_links(tmp_path: Path) -> None:
     html = report_path.read_text(encoding="utf-8")
 
     assert 'href="../screenshots/failure.png"' in html
+    assert '<img src="../screenshots/failure.png"' in html
     assert 'href="../artifacts/basic/test_smoke/log.html"' in html
+    assert "Primary logs" in html
+    assert "Raw process output" in html
+    assert 'href="../artifacts/basic/test_smoke/stdout.log"' in html
+    assert 'href="../artifacts/basic/test_smoke/stderr.log"' in html
+    assert "Other artifacts" in html
     assert 'href="../artifacts/basic/test_smoke/output.robolog"' in html
+    assert "Full traceback / raw output" in html
 
 
 def test_junit_report_includes_failures_and_artifacts(tmp_path: Path) -> None:

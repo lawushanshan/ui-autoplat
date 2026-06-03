@@ -75,6 +75,7 @@ The platform is currently a UI automation testing platform built around:
 - `report --format html|json|junit`.
 - JUnit report support for CI.
 - `config validate` checks config loading, profile existence, schema values, discovery paths, and output path writability.
+- `doctor` checks Python, key dependencies, configuration, discovery paths, and Playwright browser binaries.
 
 ### Test Authoring
 
@@ -211,6 +212,12 @@ Tasks:
 - Add exit code behavior docs.
 - Add `autoplat doctor` for environment checks.
 
+Status:
+
+- Started.
+- `autoplat doctor` added for local environment readiness checks.
+- Manual acceptance checklist added at `docs/manual-acceptance-test.md`.
+
 Needs manual/user involvement:
 
 - Possibly, if validating against a specific CI system.
@@ -273,9 +280,9 @@ Needs manual/user involvement:
 
 ## Recommended Next Step
 
-Proceed with **Iteration 3: PageObject And Assertion DSL**.
+Proceed with **manual acceptance testing** using `docs/manual-acceptance-test.md`.
 
-The browser failure chain and browser lifecycle are now validated enough to start improving test authoring ergonomics:
+The browser failure chain, browser lifecycle, PageObject example, and data-driven example are now ready for hands-on validation:
 
 ```text
 write maintainable PageObjects -> use platform assertions -> run autoplat -> diagnose through reports/artifacts

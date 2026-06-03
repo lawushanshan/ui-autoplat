@@ -214,3 +214,66 @@ discovery:
 
     assert result.exit_code == 1
     assert f"Discovery path not found: {missing_dir}" in result.output
+
+
+def test_doctor_accepts_ready_environment_with_browser_check_skipped(tmp_path: Path) -> None:
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    config_file = tmp_path / "autoplat.yaml"
+    config_file.write_text(
+        f"""
+output:
+  dir: {tmp_path / "output"}
+discovery:
+  paths:
+    - {tests_dir}
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "doctor",
+            "--config",
+            str(config_file),
+            "--skip-browser",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Doctor checks:" in result.output
+    assert "Environment looks ready." in result.output
+    assert "Browser Binary" in result.output
+    assert "Skipped by --skip-browser" in result.output
+
+
+def test_doctor_rejects_missing_discovery_path(tmp_path: Path) -> None:
+    config_file = tmp_path / "autoplat.yaml"
+    missing_dir = tmp_path / "missing-tests"
+    config_file.write_text(
+        f"""
+output:
+  dir: {tmp_path / "output"}
+discovery:
+  paths:
+    - {missing_dir}
+""",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "doctor",
+            "--config",
+            str(config_file),
+            "--skip-browser",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Environment is not ready." in result.output
+    assert f"Discovery path not found: {missing_dir}" in result.output
