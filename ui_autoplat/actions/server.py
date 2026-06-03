@@ -140,6 +140,7 @@ def start_server(host: str = "127.0.0.1", port: int = 8080) -> None:
     from ui_autoplat.actions import endpoints as ep
 
     APIRequestHandler.register("/api/health", ep.get_health)
+    APIRequestHandler.register("/api/runs/status", ep.get_run_status)
     APIRequestHandler.register("/api/runs/latest", ep.get_latest_run)
     APIRequestHandler.register("/api/runs/{run_id}", ep.get_run_results)
     APIRequestHandler.register("/api/runs", ep.trigger_test_run, method="POST")
@@ -154,8 +155,9 @@ def start_server(host: str = "127.0.0.1", port: int = 8080) -> None:
         "endpoints": [
             {"method": "GET", "path": "/api/runs/latest", "description": "Get latest test run results"},
             {"method": "GET", "path": "/api/health", "description": "Health check"},
+            {"method": "GET", "path": "/api/runs/status", "description": "Get current run status"},
             {"method": "GET", "path": "/api/runs/{run_id}", "description": "Get results by run ID"},
-            {"method": "POST", "path": "/api/runs", "description": "Trigger a new test run", "body": {"suite_path": "str", "tags": "str?", "task_name": "str?"}},
+            {"method": "POST", "path": "/api/runs", "description": "Trigger a new test run", "body": {"suite_path": "str", "tags": "str?", "task_name": "str?", "async_run": "bool?"}},
             {"method": "GET", "path": "/api/suites", "description": "List discovered test suites"},
             {"method": "GET", "path": "/api/history", "description": "Get test history trends"},
             {"method": "GET", "path": "/api/stats", "description": "Get platform statistics"},

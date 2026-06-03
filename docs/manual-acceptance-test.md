@@ -166,6 +166,7 @@ autoplat serve --host 127.0.0.1 --port 8080
 ```powershell
 curl.exe http://127.0.0.1:8080/
 curl.exe http://127.0.0.1:8080/api/health
+curl.exe http://127.0.0.1:8080/api/runs/status
 curl.exe http://127.0.0.1:8080/api/config
 curl.exe "http://127.0.0.1:8080/api/suites?suite_path=."
 curl.exe http://127.0.0.1:8080/api/runs/latest
@@ -176,10 +177,25 @@ curl.exe "http://127.0.0.1:8080/api/stats?days=abc"
 
 - `/` 列出可用 endpoint。
 - `/api/health` 返回 `{"status": "ok", ...}`。
+- `/api/runs/status` 返回当前运行状态，空闲时通常为 `idle`，异步运行时为 `running`。
 - `/api/config` 返回有效配置。
 - `/api/suites` 列出 `test_missing_heading`。
 - `/api/runs/latest` 返回最近一次持久化运行，或者返回明确的 `No runs recorded yet` 信息。
 - `/api/stats?days=abc` 返回 HTTP 400，并包含结构化错误：`error.code = invalid_parameter`。
+
+可选异步触发运行：
+
+```powershell
+curl.exe -X POST http://127.0.0.1:8080/api/runs `
+  -H "Content-Type: application/json" `
+  -d "{\"suite_path\":\".\",\"async_run\":true}"
+curl.exe http://127.0.0.1:8080/api/runs/status
+```
+
+预期结果：
+
+- POST 请求立即返回 `accepted: true`。
+- 运行中再次触发运行会返回 HTTP 409，`error.code = run_already_in_progress`。
 
 使用 `Ctrl+C` 停止服务。
 

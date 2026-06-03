@@ -204,6 +204,9 @@ Status:
 - Added parameter validation for `days` query values.
 - Added path/run-not-found handling with 404 responses.
 - Added local HTTP server tests for health, 400, and 404 responses.
+- Added `/api/runs/status` for current run state.
+- Added optional async run trigger through `POST /api/runs` with `async_run: true`.
+- Added 409 conflict handling when another run is already in progress.
 
 Needs manual/user involvement:
 

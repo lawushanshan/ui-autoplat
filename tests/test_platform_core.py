@@ -14,7 +14,7 @@ from urllib.request import urlopen
 from xml.etree import ElementTree as ET
 
 from ui_autoplat.actions import endpoints
-from ui_autoplat.actions.server import APIRequestHandler
+from ui_autoplat.actions.server import APIError, APIRequestHandler
 from ui_autoplat.assertions.web_assertions import expect_text, expect_url_contains, expect_visible
 from ui_autoplat.browser.manager import BrowserManager
 from ui_autoplat.browser.page_objects import BasePage
@@ -502,6 +502,7 @@ discovery:
     from ui_autoplat.actions import endpoints as api_endpoints
 
     APIRequestHandler.register("/api/health", api_endpoints.get_health)
+    APIRequestHandler.register("/api/runs/status", api_endpoints.get_run_status)
     APIRequestHandler.register("/api/runs/{run_id}", api_endpoints.get_run_results)
     APIRequestHandler.register("/api/stats", api_endpoints.get_stats)
 
@@ -514,6 +515,9 @@ discovery:
         health = _http_json(f"{base_url}/api/health")
         assert health["status"] == "ok"
 
+        status = _http_json(f"{base_url}/api/runs/status")
+        assert status["status"] in {"idle", "completed", "failed", "error", "running"}
+
         missing = _http_json_error(f"{base_url}/api/runs/missing")
         assert missing["status"] == 404
         assert missing["body"]["error"]["code"] == "run_not_found"
@@ -524,6 +528,87 @@ discovery:
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_api_async_run_reports_running_and_blocks_second_run(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    task_file = tmp_path / "sample_task.py"
+    _write_task_file(task_file)
+    (tmp_path / "autoplat.yaml").write_text(
+        f"""
+execution:
+  mode: in-process
+output:
+  dir: {tmp_path / "output"}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    from ui_autoplat.actions import endpoints as api_endpoints
+
+    api_endpoints._last_run = None
+    api_endpoints._set_run_status_locked(
+        status="idle",
+        run_id=None,
+        error=None,
+        started_at=None,
+        finished_at=None,
+    )
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_execute_suites(config, suites):
+        started.set()
+        release.wait(timeout=5)
+        now = datetime.now()
+        test_case = suites[0].tests[0]
+        result = AutoplatTestResult(
+            test_case=test_case,
+            status="passed",
+            start_time=now,
+            end_time=now,
+            duration=0,
+        )
+        run = AutoplatTestRun(environment=EnvironmentInfo.capture(), results=[result])
+        api_endpoints._last_run = run
+        with api_endpoints._status_lock:
+            api_endpoints._set_run_status_locked(
+                status="completed",
+                run_id=run.id,
+                finished_at=datetime.now(),
+                error=None,
+            )
+        return run
+
+    monkeypatch.setattr(api_endpoints, "_execute_suites", fake_execute_suites)
+
+    response = api_endpoints.trigger_test_run(str(tmp_path), async_run=True)
+
+    assert response["accepted"] is True
+    assert started.wait(timeout=5)
+    assert api_endpoints.get_run_status()["status"] == "running"
+
+    try:
+        api_endpoints.trigger_test_run(str(tmp_path), async_run=True)
+    except APIError as exc:
+        assert exc.status_code == 409
+        assert exc.code == "run_already_in_progress"
+    else:
+        raise AssertionError("Expected concurrent async run to be rejected")
+
+    release.set()
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        status = api_endpoints.get_run_status()
+        if status["status"] == "completed":
+            break
+        time.sleep(0.05)
+
+    assert api_endpoints.get_run_status()["status"] == "completed"
+    assert api_endpoints.get_run_status()["run_id"] is not None
 
 
 def _http_json(url: str) -> dict:

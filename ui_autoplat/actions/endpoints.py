@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import threading
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,19 @@ _last_run: TestRun | None = None
 _run_lock = threading.Lock()
 
 
+@dataclass
+class RunStatus:
+    status: str = "idle"
+    run_id: str | None = None
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error: str | None = None
+
+
+_run_status = RunStatus()
+_status_lock = threading.Lock()
+
+
 def get_health() -> dict[str, Any]:
     config = load_settings()
     return {
@@ -23,37 +38,51 @@ def get_health() -> dict[str, Any]:
     }
 
 
+def get_run_status() -> dict[str, Any]:
+    with _status_lock:
+        return _run_status_to_dict(_run_status)
+
+
 def trigger_test_run(
     suite_path: str,
     tags: str | None = None,
     task_name: str | None = None,
+    async_run: bool | str = False,
 ) -> dict[str, Any]:
     """Trigger a test run and return results."""
     global _last_run
 
-    config = load_settings()
-    if not suite_path:
-        raise APIError(400, "missing_suite_path", "suite_path is required")
-    target = Path(suite_path)
-    if not target.exists():
-        raise APIError(404, "suite_path_not_found", f"Suite path not found: {suite_path}")
+    config, suites = _prepare_run(suite_path=suite_path, tags=tags, task_name=task_name)
 
-    filter_tags = [t.strip() for t in tags.split(",")] if tags else None
-    suites = discover_tests(paths=[target], tags=filter_tags)
+    if _parse_bool(async_run):
+        with _status_lock:
+            if _run_status.status == "running":
+                raise APIError(409, "run_already_in_progress", "A test run is already in progress")
+            _set_run_status_locked(status="running", run_id=None, error=None)
 
-    all_tests = [tc for suite in suites for tc in suite.tests]
-    if task_name:
-        all_tests = [tc for tc in all_tests if tc.name == task_name or tc.name.startswith(f"{task_name}[")]
-        suites = _filter_suites_to_tests(suites, all_tests)
-        if not all_tests:
-            raise APIError(404, "test_not_found", f"Test not found: {task_name}")
+        thread = threading.Thread(
+            target=_run_suites_background,
+            args=(config, suites),
+            daemon=True,
+        )
+        thread.start()
+        return {
+            "accepted": True,
+            "status": "running",
+            "status_url": "/api/runs/status",
+        }
 
-    from ui_autoplat.core.runner import TestRunner
+    with _status_lock:
+        if _run_status.status == "running":
+            raise APIError(409, "run_already_in_progress", "A test run is already in progress")
+        _set_run_status_locked(status="running", run_id=None, error=None)
 
-    with _run_lock:
-        runner = TestRunner(config=config)
-        run = runner.run(suites)
-        _last_run = run
+    try:
+        run = _execute_suites(config, suites)
+    except Exception as exc:
+        with _status_lock:
+            _set_run_status_locked(status="error", error=str(exc), finished_at=datetime.now())
+        raise
 
     return _run_to_dict(run)
 
@@ -165,6 +194,88 @@ def _filter_suites_to_tests(suites: list[TestSuite], tests: list) -> list[TestSu
     return filtered
 
 
+def _prepare_run(
+    suite_path: str,
+    tags: str | None = None,
+    task_name: str | None = None,
+) -> tuple[Any, list[TestSuite]]:
+    config = load_settings()
+    if not suite_path:
+        raise APIError(400, "missing_suite_path", "suite_path is required")
+    target = Path(suite_path)
+    if not target.exists():
+        raise APIError(404, "suite_path_not_found", f"Suite path not found: {suite_path}")
+
+    filter_tags = [t.strip() for t in tags.split(",")] if tags else None
+    suites = discover_tests(paths=[target], tags=filter_tags)
+
+    all_tests = [tc for suite in suites for tc in suite.tests]
+    if task_name:
+        all_tests = [tc for tc in all_tests if tc.name == task_name or tc.name.startswith(f"{task_name}[")]
+        suites = _filter_suites_to_tests(suites, all_tests)
+        if not all_tests:
+            raise APIError(404, "test_not_found", f"Test not found: {task_name}")
+
+    return config, suites
+
+
+def _execute_suites(config: Any, suites: list[TestSuite]) -> TestRun:
+    global _last_run
+
+    from ui_autoplat.core.runner import TestRunner
+
+    with _run_lock:
+        runner = TestRunner(config=config)
+        run = runner.run(suites)
+        _last_run = run
+
+    with _status_lock:
+        _set_run_status_locked(
+            status="completed" if not run.has_failures else "failed",
+            run_id=run.id,
+            finished_at=datetime.now(),
+            error=None,
+        )
+    return run
+
+
+def _run_suites_background(config: Any, suites: list[TestSuite]) -> None:
+    try:
+        _execute_suites(config, suites)
+    except Exception as exc:
+        with _status_lock:
+            _set_run_status_locked(status="error", error=str(exc), finished_at=datetime.now())
+
+
+def _set_run_status_locked(
+    status: str,
+    run_id: str | None = None,
+    error: str | None = None,
+    started_at: datetime | None = None,
+    finished_at: datetime | None = None,
+) -> None:
+    _run_status.status = status
+    if run_id is not None or status in {"idle", "running"}:
+        _run_status.run_id = run_id
+    if started_at is not None or status in {"idle", "running"}:
+        _run_status.started_at = started_at or datetime.now()
+    if status == "idle" and started_at is None:
+        _run_status.started_at = None
+    if finished_at is not None or status in {"idle", "running"}:
+        _run_status.finished_at = finished_at
+    _run_status.error = error
+
+
+def _run_status_to_dict(status: RunStatus) -> dict[str, Any]:
+    return {
+        "status": status.status,
+        "run_id": status.run_id,
+        "started_at": status.started_at.isoformat() if status.started_at else None,
+        "finished_at": status.finished_at.isoformat() if status.finished_at else None,
+        "error": status.error,
+    }
+
+
 def _run_to_dict(run: TestRun) -> dict[str, Any]:
     summary = run.summary
     results_list = []
@@ -268,3 +379,11 @@ def _parse_positive_int(value: Any, name: str) -> int:
     if parsed <= 0:
         raise APIError(400, "invalid_parameter", f"{name} must be greater than 0")
     return parsed
+
+
+def _parse_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
