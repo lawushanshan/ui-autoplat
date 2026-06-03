@@ -190,12 +190,15 @@ curl.exe -X POST http://127.0.0.1:8080/api/runs `
   -H "Content-Type: application/json" `
   -d "{\"suite_path\":\".\",\"async_run\":true}"
 curl.exe http://127.0.0.1:8080/api/runs/status
+curl.exe -X POST http://127.0.0.1:8080/api/runs/cancel
 ```
 
 预期结果：
 
 - POST 请求立即返回 `accepted: true`。
 - 运行中再次触发运行会返回 HTTP 409，`error.code = run_already_in_progress`。
+- 取消请求会设置 `cancel_requested: true`。
+- 当前版本的取消是“请求取消并记录状态”，不会强制杀掉已经在执行的线程或浏览器进程。
 
 使用 `Ctrl+C` 停止服务。
 

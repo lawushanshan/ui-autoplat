@@ -24,6 +24,7 @@ class RunStatus:
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error: str | None = None
+    cancel_requested: bool = False
 
 
 _run_status = RunStatus()
@@ -43,6 +44,14 @@ def get_run_status() -> dict[str, Any]:
         return _run_status_to_dict(_run_status)
 
 
+def cancel_run() -> dict[str, Any]:
+    with _status_lock:
+        if _run_status.status != "running":
+            raise APIError(409, "no_run_in_progress", "No test run is currently in progress")
+        _run_status.cancel_requested = True
+        return _run_status_to_dict(_run_status)
+
+
 def trigger_test_run(
     suite_path: str,
     tags: str | None = None,
@@ -58,7 +67,7 @@ def trigger_test_run(
         with _status_lock:
             if _run_status.status == "running":
                 raise APIError(409, "run_already_in_progress", "A test run is already in progress")
-            _set_run_status_locked(status="running", run_id=None, error=None)
+            _set_run_status_locked(status="running", run_id=None, error=None, cancel_requested=False)
 
         thread = threading.Thread(
             target=_run_suites_background,
@@ -75,7 +84,7 @@ def trigger_test_run(
     with _status_lock:
         if _run_status.status == "running":
             raise APIError(409, "run_already_in_progress", "A test run is already in progress")
-        _set_run_status_locked(status="running", run_id=None, error=None)
+        _set_run_status_locked(status="running", run_id=None, error=None, cancel_requested=False)
 
     try:
         run = _execute_suites(config, suites)
@@ -230,8 +239,11 @@ def _execute_suites(config: Any, suites: list[TestSuite]) -> TestRun:
         _last_run = run
 
     with _status_lock:
+        final_status = "completed" if not run.has_failures else "failed"
+        if _run_status.cancel_requested:
+            final_status = "cancel_requested"
         _set_run_status_locked(
-            status="completed" if not run.has_failures else "failed",
+            status=final_status,
             run_id=run.id,
             finished_at=datetime.now(),
             error=None,
@@ -253,6 +265,7 @@ def _set_run_status_locked(
     error: str | None = None,
     started_at: datetime | None = None,
     finished_at: datetime | None = None,
+    cancel_requested: bool | None = None,
 ) -> None:
     _run_status.status = status
     if run_id is not None or status in {"idle", "running"}:
@@ -264,6 +277,10 @@ def _set_run_status_locked(
     if finished_at is not None or status in {"idle", "running"}:
         _run_status.finished_at = finished_at
     _run_status.error = error
+    if cancel_requested is not None:
+        _run_status.cancel_requested = cancel_requested
+    elif status == "idle":
+        _run_status.cancel_requested = False
 
 
 def _run_status_to_dict(status: RunStatus) -> dict[str, Any]:
@@ -273,6 +290,7 @@ def _run_status_to_dict(status: RunStatus) -> dict[str, Any]:
         "started_at": status.started_at.isoformat() if status.started_at else None,
         "finished_at": status.finished_at.isoformat() if status.finished_at else None,
         "error": status.error,
+        "cancel_requested": status.cancel_requested,
     }
 
 

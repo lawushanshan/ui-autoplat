@@ -611,6 +611,91 @@ output:
     assert api_endpoints.get_run_status()["run_id"] is not None
 
 
+def test_api_cancel_marks_running_run_without_killing_worker(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    task_file = tmp_path / "sample_task.py"
+    _write_task_file(task_file)
+    (tmp_path / "autoplat.yaml").write_text(
+        f"""
+execution:
+  mode: in-process
+output:
+  dir: {tmp_path / "output"}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+
+    from ui_autoplat.actions import endpoints as api_endpoints
+
+    api_endpoints._last_run = None
+    api_endpoints._set_run_status_locked(status="idle", cancel_requested=False)
+    started = threading.Event()
+    release = threading.Event()
+
+    def fake_execute_suites(config, suites):
+        started.set()
+        release.wait(timeout=5)
+        now = datetime.now()
+        test_case = suites[0].tests[0]
+        result = AutoplatTestResult(
+            test_case=test_case,
+            status="passed",
+            start_time=now,
+            end_time=now,
+            duration=0,
+        )
+        run = AutoplatTestRun(environment=EnvironmentInfo.capture(), results=[result])
+        api_endpoints._last_run = run
+        with api_endpoints._status_lock:
+            final_status = "cancel_requested" if api_endpoints._run_status.cancel_requested else "completed"
+            api_endpoints._set_run_status_locked(
+                status=final_status,
+                run_id=run.id,
+                finished_at=datetime.now(),
+                error=None,
+            )
+        return run
+
+    monkeypatch.setattr(api_endpoints, "_execute_suites", fake_execute_suites)
+
+    api_endpoints.trigger_test_run(str(tmp_path), async_run=True)
+    assert started.wait(timeout=5)
+
+    cancel_response = api_endpoints.cancel_run()
+
+    assert cancel_response["status"] == "running"
+    assert cancel_response["cancel_requested"] is True
+
+    release.set()
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        if api_endpoints.get_run_status()["status"] == "cancel_requested":
+            break
+        time.sleep(0.05)
+
+    status = api_endpoints.get_run_status()
+    assert status["status"] == "cancel_requested"
+    assert status["cancel_requested"] is True
+    assert status["run_id"] is not None
+
+
+def test_api_cancel_rejects_when_no_run_is_active() -> None:
+    from ui_autoplat.actions import endpoints as api_endpoints
+
+    api_endpoints._set_run_status_locked(status="idle", cancel_requested=False)
+
+    try:
+        api_endpoints.cancel_run()
+    except APIError as exc:
+        assert exc.status_code == 409
+        assert exc.code == "no_run_in_progress"
+    else:
+        raise AssertionError("Expected cancel without active run to be rejected")
+
+
 def _http_json(url: str) -> dict:
     with urlopen(url, timeout=5) as response:
         return json.loads(response.read().decode("utf-8"))

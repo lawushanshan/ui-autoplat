@@ -207,6 +207,8 @@ Status:
 - Added `/api/runs/status` for current run state.
 - Added optional async run trigger through `POST /api/runs` with `async_run: true`.
 - Added 409 conflict handling when another run is already in progress.
+- Added `POST /api/runs/cancel` to record cancellation requests.
+- Documented current cancellation semantics as status-only, without force-killing active work.
 
 Needs manual/user involvement:
 
